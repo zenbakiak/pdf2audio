@@ -7,7 +7,7 @@ from gtts import gTTS
 from openai import OpenAI
 import boto3
 from pydub import AudioSegment
-from config import Config
+from .config import Config
 
 
 def chunk_text(text: str, max_length: int = 4000) -> List[str]:

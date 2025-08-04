@@ -1,4 +1,4 @@
-# PDF to Audio Converter
+# pdf2audio, a PDF to Audio (Text To Speech) tool
 
 Convert PDF files to MP3 audio using text-to-speech with AI-powered text cleaning.
 
@@ -16,11 +16,47 @@ Convert PDF files to MP3 audio using text-to-speech with AI-powered text cleanin
 
 ## Installation
 
+### Option 1: Install as a Package (Recommended)
+
+```bash
+# Install from source
+git clone https://github.com/your-username/pdf2audio.git
+cd pdf2audio
+pip install -e .
+
+# Or install from PyPI (when published)
+pip install pdf2audio
+```
+
+### Option 2: Manual Installation
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Setup
+
+### For Package Installation
+
+When you first run the `pdf2audio` command, it will automatically create a configuration directory at `~/.pdf2audio/` with the following files:
+
+- `config.yml` - Main configuration file with TTS and LLM settings
+- `.env` - Environment file for API keys
+- `.env.example` - Template showing required environment variables
+
+Edit `~/.pdf2audio/.env` and add your API keys:
+
+```bash
+# Required for LLM text cleaning
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Required for premium TTS providers (choose one or more)
+AWS_ACCESS_KEY_ID=your_aws_access_key_here
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
+```
+
+### For Manual Installation
 
 1. Copy the environment file:
 ```bash
@@ -40,13 +76,27 @@ AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
 
 ## Usage
 
+### Package Installation Commands
+
+```bash
+# Basic usage
+pdf2audio --pdf=/path/to/file.pdf --mp3=/path/to/output.mp3 --lang=es_la
+
+# Alternative command name
+pdf-to-audio --pdf=/path/to/file.pdf --mp3=/path/to/output.mp3 --lang=es_la
+```
+
+### Manual Installation Commands
+
 ```bash
 python pdf2audio.py --pdf=/path/to/file.pdf --mp3=/path/to/output.mp3 --lang=es_la
 ```
 
-Or try the exmple:
+### Example Usage
+
 ```bash
-python pdf2audio.py --pdf=assets/test.pdf --mp3=assets/test.mp3 \
+# Try the example file
+pdf2audio --pdf=assets/test.pdf --mp3=assets/test.mp3 \
        --no-llm --ttsprovider=gtts --lang=es_la
 ```
 
@@ -112,6 +162,33 @@ tts:
 ```
 
 ## Examples
+
+### Using Package Installation
+
+```bash
+# Basic conversion with AI cleaning
+pdf2audio --pdf=document.pdf --mp3=output.mp3
+
+# Spanish conversion
+pdf2audio --pdf=documento.pdf --mp3=audio.mp3 --lang=es_la
+
+# Skip AI cleaning
+pdf2audio --pdf=document.pdf --mp3=output.mp3 --no-llm
+
+# Use specific providers (overrides config)
+pdf2audio --pdf=document.pdf --mp3=output.mp3 --cleaner-llm=gemini --ttsprovider=openai
+
+# Use OpenAI for both text cleaning and TTS
+pdf2audio --pdf=document.pdf --mp3=output.mp3 --cleaner-llm=openai --ttsprovider=openai
+
+# Use free options only
+pdf2audio --pdf=document.pdf --mp3=output.mp3 --ttsprovider=gtts --no-llm
+
+# Custom config file
+pdf2audio --pdf=document.pdf --mp3=output.mp3 --config=my-config.yml
+```
+
+### Using Manual Installation
 
 ```bash
 # Basic conversion with AI cleaning

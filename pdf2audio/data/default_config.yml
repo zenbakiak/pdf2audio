@@ -36,12 +36,12 @@ tts:
 
     # OpenAI TTS - Premium voices with high quality
     openai:
-      voice: "alloy"      # Options: alloy, echo, fable, onyx, nova, shimmer
+      voice: "nova"      # Options: alloy, echo, fable, onyx, nova, shimmer
       model: "tts-1"      # tts-1 (fast) or tts-1-hd (higher quality)
 
     # AWS Polly - Wide selection of voices and languages
     aws:
-      voice_id: "Joanna"  # Female English voice
+      voice_id: "Mia"  # Female English voice
       engine: "neural"    # "standard" or "neural" (higher quality)
       # Other popular voices:
       # English: Matthew (male), Kendra (female), Joey (male)
@@ -72,13 +72,23 @@ llm:
   # Text cleaning prompt - This is sent to the LLM to clean PDF text
   # You can customize this prompt to handle specific types of documents
   cleaning_prompt: |
-    Please clean the following PDF text by:
-    1. Removing headers, footers, and page numbers
-    2. Removing unnecessary line breaks within sentences
-    3. Fixing formatting issues and OCR errors
-    4. Keeping the main content readable for text-to-speech
-    5. Maintaining paragraph structure
-    6. Do not add any commentary or explanations, just return the cleaned text.
+    I'm building a tool to clean and prepare documents for text-to-speech (TTS) processing. Please process the following PDF text with the following instructions:
+
+    1. **Remove all non-essential elements**, including:
+      - Headers, footers, and page numbers (even if repeated).
+      - Website artifacts such as cookie banners, navigation menus, ads, comments, and any content that is not part of the main article or body text.
+      - For PDFs with a **book layout** (two pages per physical page), split and clean both pages accordingly.
+
+    2. **Preserve the main content only** — ensure the body text remains intact and fully readable.
+
+    3. **Fix formatting issues**, including:
+      - Removing unnecessary line breaks within sentences.
+      - Correcting broken words split across lines.
+      - Fixing OCR-related errors (e.g., misplaced characters, garbled words).
+
+    4. **Maintain natural paragraph structure** to ensure smooth flow for TTS.
+
+    5. **Do not include any commentary, explanations, or metadata** — return only the cleaned, plain text.
 
     Text to clean:
 
@@ -106,7 +116,7 @@ output:
 #     openai:
 #       voice: "nova"        # Female voice, good for audiobooks
 #       model: "tts-1-hd"    # Higher quality, slower processing
-#     
+#
 #     aws:
 #       voice_id: "Mia"      # Spanish Mexico female voice
 #       engine: "neural"     # Use neural engine for better quality
@@ -130,7 +140,7 @@ output:
 #     4. Fix OCR errors while preserving scientific notation
 #     5. Remove figure captions and table references
 #     6. Return only the main body text suitable for audio narration.
-#     
+#
 #     Text to clean:
 
 # Custom output directory and file naming:
