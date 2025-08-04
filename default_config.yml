@@ -1,0 +1,143 @@
+# ============================================================================
+# PDF to Audio Converter - Default Configuration
+# ============================================================================
+# This is the default configuration file for the PDF to Audio converter.
+# Copy this file to 'config.yml' and modify the settings as needed.
+
+# ============================================================================
+# TEXT-TO-SPEECH (TTS) CONFIGURATION
+# ============================================================================
+tts:
+  # TTS Provider: Choose your text-to-speech engine
+  # Options: "gtts" (free), "openai" (premium), "aws" (premium)
+  provider: "gtts"
+
+  # Speaking rate/speed control (range: 0.25 - 2.0)
+  # 1.0 = normal speed, 2.0 = twice as fast, 0.5 = half speed
+  speaking_rate: 1.0
+
+  # Default language for TTS (can be overridden with --lang parameter)
+  default_language: "en"
+
+  # Legacy setting for Google TTS slow speech (rarely needed)
+  slow: false
+
+  # Language code mappings for special cases
+  # Maps non-standard codes to standard ones
+  language_mappings:
+    es_la: "es"    # Spanish Latin America -> Spanish
+    en_us: "en"    # English US -> English
+    en_uk: "en"    # English UK -> English
+
+  # Voice configuration for each TTS provider
+  voice:
+    # Google TTS (gTTS) - Free option
+    gtts: {}  # No voice selection available
+
+    # OpenAI TTS - Premium voices with high quality
+    openai:
+      voice: "alloy"      # Options: alloy, echo, fable, onyx, nova, shimmer
+      model: "tts-1"      # tts-1 (fast) or tts-1-hd (higher quality)
+
+    # AWS Polly - Wide selection of voices and languages
+    aws:
+      voice_id: "Joanna"  # Female English voice
+      engine: "neural"    # "standard" or "neural" (higher quality)
+      # Other popular voices:
+      # English: Matthew (male), Kendra (female), Joey (male)
+      # Spanish: Lupe (female), Miguel (male), Conchita (Spain, female)
+      # See AWS Polly documentation for complete voice list
+
+# ============================================================================
+# LARGE LANGUAGE MODEL (LLM) CONFIGURATION
+# ============================================================================
+llm:
+  # LLM Provider for text cleaning
+  # Options: "openai" (ChatGPT), "gemini" (Google)
+  provider: "openai"
+
+  # API configuration for each provider
+  api:
+    # OpenAI/ChatGPT settings
+    openai:
+      model: "gpt-3.5-turbo"    # or "gpt-4" for better quality (more expensive)
+      max_tokens: 4000          # Maximum response length
+      temperature: 0.1          # Lower = more consistent, higher = more creative
+
+    # Google Gemini settings
+    gemini:
+      model: "gemini-pro"       # Current Gemini model
+      temperature: 0.1          # Lower = more consistent, higher = more creative
+
+  # Text cleaning prompt - This is sent to the LLM to clean PDF text
+  # You can customize this prompt to handle specific types of documents
+  cleaning_prompt: |
+    Please clean the following PDF text by:
+    1. Removing headers, footers, and page numbers
+    2. Removing unnecessary line breaks within sentences
+    3. Fixing formatting issues and OCR errors
+    4. Keeping the main content readable for text-to-speech
+    5. Maintaining paragraph structure
+    6. Do not add any commentary or explanations, just return the cleaned text.
+
+    Text to clean:
+
+# ============================================================================
+# OUTPUT CONFIGURATION
+# ============================================================================
+output:
+  # Save original extracted text from PDF (useful for debugging)
+  save_raw_text: false
+
+  # Save LLM-cleaned text (useful for reviewing cleaning quality)
+  save_cleaned_text: false
+
+  # Enable verbose logging (shows processing steps and progress)
+  verbose: true
+
+# ============================================================================
+# ADVANCED CONFIGURATION EXAMPLES (COMMENTED OUT)
+# ============================================================================
+# Uncomment and modify these sections for advanced usage
+
+# Advanced TTS voice examples:
+# tts:
+#   voice:
+#     openai:
+#       voice: "nova"        # Female voice, good for audiobooks
+#       model: "tts-1-hd"    # Higher quality, slower processing
+#     
+#     aws:
+#       voice_id: "Mia"      # Spanish Mexico female voice
+#       engine: "neural"     # Use neural engine for better quality
+#       # For multilingual content:
+#       # voice_id: "Aditi"  # Supports Hindi and English
+
+# Advanced language mappings:
+# tts:
+#   language_mappings:
+#     pt_br: "pt"          # Portuguese Brazil -> Portuguese
+#     zh_cn: "zh"          # Chinese Simplified -> Chinese
+#     fr_ca: "fr-CA"       # French Canada (if supported by provider)
+
+# Advanced LLM prompts for specific document types:
+# llm:
+#   cleaning_prompt: |
+#     You are processing a scientific research paper. Please:
+#     1. Remove headers, footers, page numbers, and references
+#     2. Preserve mathematical formulas and technical terms
+#     3. Maintain the logical flow of arguments
+#     4. Fix OCR errors while preserving scientific notation
+#     5. Remove figure captions and table references
+#     6. Return only the main body text suitable for audio narration.
+#     
+#     Text to clean:
+
+# Custom output directory and file naming:
+# output:
+#   save_raw_text: true
+#   save_cleaned_text: true
+#   verbose: true
+#   # Optional: custom file naming patterns (not implemented yet)
+#   # raw_text_suffix: "_original"
+#   # cleaned_text_suffix: "_processed"

@@ -1,0 +1,309 @@
+# ============================================================================
+# PDF to Audio Converter - .gitignore
+# ============================================================================
+
+# ============================================================================
+# ENVIRONMENT & SECRETS
+# ============================================================================
+# Environment variables (contains API keys)
+.env
+.env.local
+.env.production
+.env.staging
+
+# API keys and sensitive configuration
+*_api_key*
+*_secret*
+secrets/
+credentials/
+
+# ============================================================================
+# PROJECT-SPECIFIC FILES
+# ============================================================================
+# Generated audio files
+*.mp3
+*.wav
+*.ogg
+*.m4a
+*.flac
+
+# Generated text files (raw/cleaned output)
+*_raw.txt
+*_cleaned.txt
+*_original.txt
+*_processed.txt
+
+# User configuration (keep default, ignore user's custom config)
+config.yml
+my_config.yml
+local_config.yml
+custom_config.yml
+
+# Test files and temporary PDFs
+test_*.pdf
+sample_*.pdf
+temp_*.pdf
+demo_*.pdf
+
+# ============================================================================
+# PYTHON
+# ============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+virtualenv/
+
+# pyenv
+.python-version
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# ============================================================================
+# IDE & EDITORS
+# ============================================================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# LOGS & TEMPORARY FILES
+# ============================================================================
+# Logs
+*.log
+logs/
+log/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Cache directories
+.cache/
+cache/
+
+# ============================================================================
+# DEVELOPMENT & TESTING
+# ============================================================================
+# Test outputs
+test_output*/
+test_results/
+benchmark_results/
+
+# Profiling
+*.prof
+
+# Coverage
+coverage/
+
+# Documentation builds
+docs/_build/
+docs/build/
+site/
+
+# ============================================================================
+# CLOUD & DEPLOYMENT
+# ============================================================================
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore
+
+# Kubernetes
+k8s-local/
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# ============================================================================
+# PACKAGE MANAGERS
+# ============================================================================
+# npm (if using any Node.js tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# MISC
+# ============================================================================
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Fonts (if any custom fonts are added)
+*.ttf
+*.otf
+*.woff
+*.woff2
+
+# Database files (if any local databases are used)
+*.db
+*.sqlite
+*.sqlite3
+
+# Large media files that shouldn't be in repo
+*.mov
+*.avi
+*.mkv
+*.mp4
+
+# ============================================================================
+# PROJECT DOCUMENTATION EXCEPTIONS
+# ============================================================================
+# Keep these important files
+!README.md
+!SETUP.md
+!LICENSE
+!CHANGELOG.md
+!default_config.yml
+!.env.example
+
+# Keep example files
+!example_*.pdf
+!sample_config.yml
