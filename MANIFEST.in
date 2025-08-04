@@ -1,3 +1,4 @@
 include README.md
+include LICENSE
 include requirements.txt
 recursive-include pdf2audio/data *.yml *.example

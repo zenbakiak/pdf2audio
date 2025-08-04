@@ -16,12 +16,12 @@ if (this_directory / "requirements.txt").exists():
 setup(
     name="pdf2audio",
     version="2.0.0",
-    author="PDF2Audio Team",
-    author_email="pdf2audio@example.com",
+    author="zenbakiak",
+    author_email="zenbakiak@users.noreply.github.com",
     description="Convert PDF documents to audio using various TTS providers and AI-powered text cleaning",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/pdf2audio",
+    url="https://github.com/zenbakiak/pdf2audio",
     packages=find_packages(include=['pdf2audio', 'pdf2audio.*']),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -56,9 +56,9 @@ setup(
     },
     keywords="pdf, audio, tts, text-to-speech, openai, aws, polly, gtts, accessibility",
     project_urls={
-        "Bug Reports": "https://github.com/your-username/pdf2audio/issues",
-        "Source": "https://github.com/your-username/pdf2audio",
-        "Documentation": "https://github.com/your-username/pdf2audio#readme",
+        "Bug Reports": "https://github.com/zenbakiak/pdf2audio/issues",
+        "Source": "https://github.com/zenbakiak/pdf2audio",
+        "Documentation": "https://github.com/zenbakiak/pdf2audio#readme",
     },
     extras_require={
         "dev": [

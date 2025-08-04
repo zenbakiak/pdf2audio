@@ -16,11 +16,38 @@ Convert PDF files to MP3 audio using text-to-speech with AI-powered text cleanin
 
 ## Installation
 
-### Option 1: Install as a Package (Recommended)
+### Quick Start (Recommended)
 
+1. **Clone and install the package:**
+   ```bash
+   git clone https://github.com/zenbakiak/pdf2audio.git
+   cd pdf2audio
+   pip install -e .
+   ```
+
+2. **Test the installation:**
+   ```bash
+   pdf2audio --help
+   ```
+   This creates the `~/.pdf2audio/` config directory automatically.
+
+3. **Add your API keys:**
+   ```bash
+   nano ~/.pdf2audio/.env
+   ```
+   Add keys for the services you want to use (see [API Keys](#api-keys) section below).
+
+4. **Try it out:**
+   ```bash
+   pdf2audio --pdf assets/test.pdf --mp3 test.mp3 --no-llm --ttsprovider gtts
+   ```
+
+### Installation Options
+
+#### Option 1: Package Installation (Recommended)
 ```bash
-# Install from source
-git clone https://github.com/your-username/pdf2audio.git
+# Development installation (editable)
+git clone https://github.com/zenbakiak/pdf2audio.git
 cd pdf2audio
 pip install -e .
 
@@ -28,51 +55,49 @@ pip install -e .
 pip install pdf2audio
 ```
 
-### Option 2: Manual Installation
+After installation, you'll have access to these commands:
+- `pdf2audio` - Main command
+- `pdf-to-audio` - Alternative command name
 
+#### Option 2: Manual Installation
 ```bash
+git clone https://github.com/zenbakiak/pdf2audio.git
+cd pdf2audio
 pip install -r requirements.txt
+python pdf2audio.py --help
 ```
 
-## Setup
+## API Keys
 
-### For Package Installation
+### Automatic Configuration (Package Installation)
 
-When you first run the `pdf2audio` command, it will automatically create a configuration directory at `~/.pdf2audio/` with the following files:
+When you first run `pdf2audio`, it automatically creates `~/.pdf2audio/` with:
+- `config.yml` - Main configuration file
+- `.env` - Your API keys (edit this file)
+- `.env.example` - Template file
 
-- `config.yml` - Main configuration file with TTS and LLM settings
-- `.env` - Environment file for API keys
-- `.env.example` - Template showing required environment variables
+### Manual Configuration
 
-Edit `~/.pdf2audio/.env` and add your API keys:
-
-```bash
-# Required for LLM text cleaning
-OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Required for premium TTS providers (choose one or more)
-AWS_ACCESS_KEY_ID=your_aws_access_key_here
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
-```
-
-### For Manual Installation
-
-1. Copy the environment file:
+For manual installation, copy the environment template:
 ```bash
 cp .env.example .env
 ```
 
-2. Add your API keys to `.env` (the script will automatically load this file):
+### Required API Keys
+
+Edit `~/.pdf2audio/.env` (or `.env` for manual installation) and add your API keys:
+
 ```bash
-# Required for LLM text cleaning
+# For AI text cleaning (choose one or both)
 OPENAI_API_KEY=your_openai_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# Required for premium TTS providers (choose one or more)
+# For premium TTS providers (optional)
 AWS_ACCESS_KEY_ID=your_aws_access_key_here
 AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
 ```
+
+**Note:** You can start with just Google TTS (free) by using `--no-llm --ttsprovider gtts` - no API keys needed!
 
 ## Usage
 
@@ -212,6 +237,61 @@ python pdf2audio.py --pdf=document.pdf --mp3=output.mp3 --ttsprovider=gtts --no-
 # Custom config file
 python pdf2audio.py --pdf=document.pdf --mp3=output.mp3 --config=my-config.yml
 ```
+
+## Troubleshooting
+
+### Installation Issues
+
+**ImportError or ModuleNotFoundError:**
+```bash
+# Reinstall the package
+pip uninstall pdf2audio
+pip install -e .
+```
+
+**Permission errors:**
+```bash
+# Install with user permissions
+pip install -e . --user
+```
+
+**Command not found:**
+```bash
+# Verify installation
+pip list | grep pdf2audio
+
+# Try full path
+python -m pdf2audio.cli --help
+```
+
+### Configuration Issues
+
+**Config directory not created:**
+```bash
+# Manually create and test
+mkdir -p ~/.pdf2audio
+pdf2audio --help
+```
+
+**API key errors:**
+```bash
+# Check your .env file has no extra spaces
+cat ~/.pdf2audio/.env
+
+# Test with free options first
+pdf2audio --pdf test.pdf --mp3 test.mp3 --no-llm --ttsprovider gtts
+```
+
+**"No text found in PDF" error:**
+- Try a different PDF file
+- Ensure the PDF contains selectable text (not just images)
+- Use `--verbose` flag for more details
+
+### Getting Help
+
+- Check the [Installation Guide](INSTALL.md) for detailed setup
+- Report issues at: https://github.com/zenbakiak/pdf2audio/issues
+- Use `--verbose` flag for detailed error messages
 
 ## TTS Provider Documentation
 

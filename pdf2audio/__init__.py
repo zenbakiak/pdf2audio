@@ -13,7 +13,7 @@ from .llm_providers import LLMFactory, OpenAILLM, GeminiLLM
 from .tts_providers import TTSFactory, GoogleTTS, OpenAITTS, AWSTTS
 
 __version__ = "2.0.0"
-__author__ = "PDF2Audio Team"
+__author__ = "zenbakiak"
 
 # Public API
 __all__ = [

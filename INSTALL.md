@@ -29,7 +29,7 @@
 ### Option 1: Development Installation
 
 ```bash
-git clone https://github.com/your-username/pdf2audio.git
+git clone https://github.com/zenbakiak/pdf2audio.git
 cd pdf2audio
 pip install -e .
 ```
