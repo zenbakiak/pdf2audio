@@ -2,9 +2,9 @@
 
 from typing import Optional
 import os
-from config import Config
-from llm_providers import LLMFactory
-from tts_providers import TTSFactory
+from .config import Config
+from .llm_providers import LLMFactory
+from .tts_providers import TTSFactory
 
 
 class ContentCleaner:

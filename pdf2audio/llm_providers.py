@@ -5,7 +5,7 @@ import os
 from typing import Optional
 from openai import OpenAI
 import google.generativeai as genai
-from config import Config
+from .config import Config
 
 
 class LLMProvider(ABC):

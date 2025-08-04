@@ -2,6 +2,8 @@
 
 import yaml
 import os
+import shutil
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 
@@ -11,14 +13,57 @@ class Config:
     _instance: Optional['Config'] = None
     _config: Dict[str, Any] = {}
     
-    def __new__(cls, config_path: str = "config.yml") -> 'Config':
+    def __new__(cls, config_path: Optional[str] = None) -> 'Config':
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance.user_config_dir = Path.home() / ".pdf2audio"
+            cls._instance._setup_user_directory()
             cls._instance._load_config(config_path)
         return cls._instance
     
-    def _load_config(self, config_path: str) -> None:
+    def _setup_user_directory(self) -> None:
+        """Setup user configuration directory if it doesn't exist."""
+        if not self.user_config_dir.exists():
+            print(f"Creating PDF2Audio configuration directory: {self.user_config_dir}")
+            self.user_config_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copy default configuration files
+            self._copy_default_files()
+    
+    def _copy_default_files(self) -> None:
+        """Copy default configuration files to user directory."""
+        package_dir = Path(__file__).parent
+        data_dir = package_dir / "data"
+        
+        # Copy default config if it doesn't exist
+        user_config = self.user_config_dir / "config.yml"
+        if not user_config.exists():
+            default_config = data_dir / "default_config.yml"
+            if default_config.exists():
+                shutil.copy2(default_config, user_config)
+                print(f"Created default config: {user_config}")
+        
+        # Copy .env.example if it doesn't exist
+        user_env = self.user_config_dir / ".env"
+        user_env_example = self.user_config_dir / ".env.example"
+        if not user_env_example.exists():
+            env_example = data_dir / ".env.example"
+            if env_example.exists():
+                shutil.copy2(env_example, user_env_example)
+                print(f"Created environment template: {user_env_example}")
+                
+                # Also create .env if it doesn't exist
+                if not user_env.exists():
+                    shutil.copy2(env_example, user_env)
+                    print(f"Created environment file: {user_env}")
+                    print("Please edit ~/.pdf2audio/.env with your API keys")
+    
+    def _load_config(self, config_path: Optional[str] = None) -> None:
         """Load configuration from YAML file or use default config file."""
+        # Determine config path
+        if config_path is None:
+            config_path = str(self.user_config_dir / "config.yml")
+        
         try:
             with open(config_path, 'r') as file:
                 self._config = yaml.safe_load(file)
@@ -31,7 +76,11 @@ class Config:
     
     def _load_default_config(self) -> Dict[str, Any]:
         """Load default configuration from default_config.yml file."""
-        default_config_path = os.path.join(os.path.dirname(__file__), 'default_config.yml')
+        # Try user directory first, then package data directory
+        user_default = self.user_config_dir / "config.yml"
+        package_default = Path(__file__).parent / "data" / "default_config.yml"
+        
+        default_config_path = str(user_default if user_default.exists() else package_default)
         
         try:
             with open(default_config_path, 'r') as file:
