@@ -68,7 +68,8 @@ class Config:
             with open(config_path, 'r') as file:
                 self._config = yaml.safe_load(file)
         except FileNotFoundError:
-            print(f"Config file not found: {config_path}")
+            print(f"Warning: Config file not found at {config_path}.")
+            print("Using default configuration. To customize, create a config.yml file.")
             self._config = self._load_default_config()
         except Exception as e:
             print(f"Error loading config: {e}")
@@ -145,6 +146,11 @@ class Config:
     def cleaning_prompt(self) -> str:
         """Get cleaning prompt."""
         return self.get('llm.cleaning_prompt', 'Please clean this PDF text for text-to-speech conversion:')
+
+    @property
+    def ssml_prompt(self) -> str:
+        """Get SSML prompt."""
+        return self.get('llm.ssml_prompt', 'Add SSML tags to this text:')
     
     @property
     def verbose(self) -> bool:
@@ -171,3 +177,7 @@ class Config:
     def should_save_cleaned_text(self) -> bool:
         """Check if cleaned text should be saved."""
         return self.get('output.save_cleaned_text', False)
+
+    def should_save_cleaned_chunks(self) -> bool:
+        """Check if cleaned text chunks should be saved."""
+        return self.get('output.save_cleaned_chunks', False)

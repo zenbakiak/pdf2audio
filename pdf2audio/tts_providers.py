@@ -9,6 +9,11 @@ import boto3
 from pydub import AudioSegment
 from .config import Config
 
+try:
+    from google.cloud import texttospeech
+except ImportError:
+    texttospeech = None
+
 
 def chunk_text(text: str, max_length: int = 4000) -> List[str]:
     """Split text into chunks that respect sentence boundaries."""
@@ -97,33 +102,61 @@ class TTSProvider(ABC):
         self.config = config
     
     @abstractmethod
-    def synthesize(self, text: str, output_path: str, language: str = 'en') -> None:
-        """Synthesize text to speech."""
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
+        """Synthesize text chunks to speech."""
+        pass
+
+    @abstractmethod
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """Get the maximum number of characters allowed per chunk."""
         pass
 
 
 class GoogleTTS(TTSProvider):
     """Google Text-to-Speech provider."""
     
-    def synthesize(self, text: str, output_path: str, language: str = 'en') -> None:
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """gTTS handles its own chunking, but we can set a safe limit."""
+        if is_ssml:
+            raise ValueError("Google TTS provider does not support SSML.")
+        return 5000
+
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
         """Synthesize text using Google TTS."""
         speaking_rate = self.config.speaking_rate
-        
         if speaking_rate != 1.0:
             validate_speaking_rate(speaking_rate)
         
-        temp_output = output_path
-        if speaking_rate != 1.0:
-            temp_output = output_path.replace('.mp3', '_temp.mp3')
-        
         slow = self.config.get('tts.slow', False)
-        tts = gTTS(text=text, lang=language, slow=slow)
-        tts.save(temp_output)
         
-        if speaking_rate != 1.0:
-            if self.config.verbose:
-                print(f"Adjusting audio speed to {speaking_rate}x...")
-            adjust_audio_speed(temp_output, output_path, speaking_rate)
+        audio_segments = []
+        temp_files = []
+        
+        try:
+            for i, chunk in enumerate(chunks):
+                temp_file = output_path.replace('.mp3', f'_temp_chunk_{i}.mp3')
+                temp_files.append(temp_file)
+                
+                tts = gTTS(text=chunk, lang=language, slow=slow)
+                tts.save(temp_file)
+                audio_segments.append(AudioSegment.from_mp3(temp_file))
+
+            # Combine audio segments
+            combined_audio = sum(audio_segments)
+            
+            # Adjust speed if necessary
+            if speaking_rate != 1.0:
+                if self.config.verbose:
+                    print(f"Adjusting audio speed to {speaking_rate}x...")
+                combined_audio = combined_audio.speedup(playback_speed=speaking_rate)
+
+            combined_audio.export(output_path, format="mp3")
+            
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
 
 
 class OpenAITTS(TTSProvider):
@@ -143,70 +176,51 @@ class OpenAITTS(TTSProvider):
             return OpenAI(api_key=api_key)
         except Exception as e:
             raise ValueError(f"Failed to initialize OpenAI client. Error: {e}")
-    
-    def synthesize(self, text: str, output_path: str, language: str = 'en') -> None:
+
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """Get max chunk size for OpenAI TTS."""
+        if is_ssml:
+            raise ValueError("OpenAI TTS provider does not support SSML.")
+        return 4000
+
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
         """Synthesize text using OpenAI TTS."""
         voice_config = self.config.get_tts_config('openai')
         speaking_rate = self.config.speaking_rate
         
-        # Check if text needs to be chunked
-        max_chars = 4000  # Leave some buffer below 4096
-        if len(text) <= max_chars:
-            # Single request
-            response = self.client.audio.speech.create(
-                model=voice_config.get('model', 'tts-1'),
-                voice=voice_config.get('voice', 'alloy'),
-                input=text,
-                speed=speaking_rate
-            )
-            response.stream_to_file(output_path)
-        else:
-            # Split text into chunks and combine audio
-            if self.config.verbose:
-                print(f"Text is {len(text)} characters, splitting into chunks...")
-            
-            chunks = chunk_text(text, max_chars)
-            if self.config.verbose:
-                print(f"Split into {len(chunks)} chunks")
-            
-            audio_segments = []
-            temp_files = []
-            
-            try:
-                for i, chunk in enumerate(chunks):
-                    temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
-                    temp_files.append(temp_file)
-                    
-                    if self.config.verbose:
-                        print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
-                    
-                    response = self.client.audio.speech.create(
-                        model=voice_config.get('model', 'tts-1'),
-                        voice=voice_config.get('voice', 'alloy'),
-                        input=chunk,
-                        speed=speaking_rate
-                    )
-                    response.stream_to_file(temp_file)
-                    
-                    # Load audio segment
-                    audio_segments.append(AudioSegment.from_mp3(temp_file))
+        audio_segments = []
+        temp_files = []
+        
+        try:
+            for i, chunk in enumerate(chunks):
+                temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
+                temp_files.append(temp_file)
                 
-                # Combine all audio segments
                 if self.config.verbose:
-                    print("Combining audio chunks...")
+                    print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
                 
-                combined_audio = audio_segments[0]
-                for segment in audio_segments[1:]:
-                    combined_audio = combined_audio + segment
+                response = self.client.audio.speech.create(
+                    model=voice_config.get('model', 'tts-1'),
+                    voice=voice_config.get('voice', 'alloy'),
+                    input=chunk,
+                    speed=speaking_rate
+                )
+                response.stream_to_file(temp_file)
                 
-                # Export combined audio
-                combined_audio.export(output_path, format="mp3")
-                
-            finally:
-                # Clean up temporary files
-                for temp_file in temp_files:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
+                audio_segments.append(AudioSegment.from_mp3(temp_file))
+            
+            # Combine all audio segments
+            if self.config.verbose:
+                print("Combining audio chunks...")
+            
+            combined_audio = sum(audio_segments)
+            combined_audio.export(output_path, format="mp3")
+            
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
 
 
 class AWSTTS(TTSProvider):
@@ -229,8 +243,12 @@ class AWSTTS(TTSProvider):
             aws_secret_access_key=aws_secret,
             region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
         )
-    
-    def synthesize(self, text: str, output_path: str, language: str = 'en') -> None:
+
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """Get max chunk size for AWS Polly."""
+        return 5800 if is_ssml else 2800
+
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
         """Synthesize text using AWS Polly."""
         voice_config = self.config.get_tts_config('aws')
         speaking_rate = self.config.speaking_rate
@@ -238,50 +256,22 @@ class AWSTTS(TTSProvider):
         rate_percent = int((speaking_rate - 1.0) * 100)
         rate_value = f"{rate_percent:+d}%" if rate_percent != 0 else "0%"
         
-        # AWS Polly limit is ~3000 billable chars, use 2800 as safe limit
-        max_chars = 2800
+        is_ssml = len(chunks) > 0 and chunks[0].strip().startswith('<speak>')
         
-        if len(text) <= max_chars:
-            # Single request
-            ssml = f"""
-            <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{language}">
-                <prosody rate="{rate_value}">
-                    {text}
-                </prosody>
-            </speak>
-            """
-            
-            response = self.client.synthesize_speech(
-                Text=ssml,
-                TextType='ssml',
-                OutputFormat='mp3',
-                VoiceId=voice_config.get('voice_id', 'Joanna'),
-                Engine=voice_config.get('engine', 'neural'),
-                LanguageCode=language
-            )
-            
-            with open(output_path, 'wb') as f:
-                f.write(response['AudioStream'].read())
-        else:
-            # Split text into chunks and combine audio
-            if self.config.verbose:
-                print(f"Text is {len(text)} characters, splitting into chunks for AWS Polly...")
-            
-            chunks = chunk_text(text, max_chars)
-            if self.config.verbose:
-                print(f"Split into {len(chunks)} chunks")
-            
-            audio_segments = []
-            temp_files = []
-            
-            try:
-                for i, chunk in enumerate(chunks):
-                    temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
-                    temp_files.append(temp_file)
-                    
-                    if self.config.verbose:
-                        print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
-                    
+        audio_segments = []
+        temp_files = []
+        
+        try:
+            for i, chunk in enumerate(chunks):
+                temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
+                temp_files.append(temp_file)
+                
+                if self.config.verbose:
+                    print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
+                
+                if is_ssml:
+                    ssml = chunk
+                else:
                     ssml = f"""
                     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{language}">
                         <prosody rate="{rate_value}">
@@ -289,38 +279,126 @@ class AWSTTS(TTSProvider):
                         </prosody>
                     </speak>
                     """
-                    
-                    response = self.client.synthesize_speech(
-                        Text=ssml,
-                        TextType='ssml',
-                        OutputFormat='mp3',
-                        VoiceId=voice_config.get('voice_id', 'Joanna'),
-                        Engine=voice_config.get('engine', 'neural'),
-                        LanguageCode=language
-                    )
-                    
-                    with open(temp_file, 'wb') as f:
-                        f.write(response['AudioStream'].read())
-                    
-                    # Load audio segment
-                    audio_segments.append(AudioSegment.from_mp3(temp_file))
                 
-                # Combine all audio segments
+                response = self.client.synthesize_speech(
+                    Text=ssml,
+                    TextType='ssml',
+                    OutputFormat='mp3',
+                    VoiceId=voice_config.get('voice_id', 'Joanna'),
+                    Engine=voice_config.get('engine', 'neural'),
+                    LanguageCode=language
+                )
+                
+                with open(temp_file, 'wb') as f:
+                    f.write(response['AudioStream'].read())
+                
+                audio_segments.append(AudioSegment.from_mp3(temp_file))
+            
+            # Combine all audio segments
+            if self.config.verbose:
+                print("Combining audio chunks...")
+            
+            combined_audio = sum(audio_segments)
+            combined_audio.export(output_path, format="mp3")
+            
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+
+
+class GoogleCloudTTS(TTSProvider):
+    """Google Cloud Text-to-Speech provider."""
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        if texttospeech is None:
+            raise ImportError(
+                "Google Cloud Text-to-Speech library not found. "
+                "Please install it with: pip install google-cloud-texttospeech"
+            )
+        self.client = self._create_client()
+
+    def _create_client(self):
+        """Create Google Cloud TTS client."""
+        credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if not credentials_path:
+            raise ValueError(
+                "GOOGLE_APPLICATION_CREDENTIALS environment variable not set. "
+                "Please set it to the path of your Google Cloud service account key file."
+            )
+        
+        # Expand the tilde to the user's home directory
+        expanded_path = os.path.expanduser(credentials_path)
+
+        if not os.path.exists(expanded_path):
+            raise FileNotFoundError(
+                f"The service account key file was not found at the specified path: {expanded_path}"
+            )
+
+        # It's good practice to update the environment variable for the client library to use
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = expanded_path
+        
+        return texttospeech.TextToSpeechClient()
+
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """Get max chunk size for Google Cloud TTS."""
+        return 4800 if is_ssml else 5000
+
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
+        """Synthesize text using Google Cloud TTS."""
+        voice_config = self.config.get_tts_config('google')
+        speaking_rate = self.config.speaking_rate
+        
+        is_ssml = len(chunks) > 0 and chunks[0].strip().startswith('<speak>')
+        
+        audio_segments = []
+        temp_files = []
+
+        try:
+            for i, chunk in enumerate(chunks):
+                temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
+                temp_files.append(temp_file)
+
                 if self.config.verbose:
-                    print("Combining audio chunks...")
+                    print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
+
+                if is_ssml:
+                    synthesis_input = texttospeech.SynthesisInput(ssml=chunk)
+                else:
+                    synthesis_input = texttospeech.SynthesisInput(text=chunk)
                 
-                combined_audio = audio_segments[0]
-                for segment in audio_segments[1:]:
-                    combined_audio = combined_audio + segment
+                voice = texttospeech.VoiceSelectionParams(
+                    language_code=voice_config.get('language_code', 'en-US'),
+                    name=voice_config.get('voice_name', 'en-US-Studio-M')
+                )
+                audio_config = texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3,
+                    speaking_rate=speaking_rate
+                )
+
+                response = self.client.synthesize_speech(
+                    input=synthesis_input, voice=voice, audio_config=audio_config
+                )
+
+                with open(temp_file, "wb") as out:
+                    out.write(response.audio_content)
                 
-                # Export combined audio
-                combined_audio.export(output_path, format="mp3")
-                
-            finally:
-                # Clean up temporary files
-                for temp_file in temp_files:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
+                audio_segments.append(AudioSegment.from_mp3(temp_file))
+
+            # Combine all audio segments
+            if self.config.verbose:
+                print("Combining audio chunks...")
+            
+            combined_audio = sum(audio_segments)
+            combined_audio.export(output_path, format="mp3")
+
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
 
 
 class TTSFactory:
@@ -332,7 +410,8 @@ class TTSFactory:
         providers = {
             'gtts': GoogleTTS,
             'openai': OpenAITTS,
-            'aws': AWSTTS
+            'aws': AWSTTS,
+            'google': GoogleCloudTTS
         }
         
         provider_class = providers.get(provider_name.lower())
