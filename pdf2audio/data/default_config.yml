@@ -56,6 +56,11 @@ llm:
   # Options: "openai" (ChatGPT), "gemini" (Google)
   provider: "openai"
 
+  # Add SSML tags to the output to improve the TTS experience.
+  # This is only supported by some TTS providers (e.g., AWS Polly).
+  # Options: true, false
+  use_ssml: false
+
   # API configuration for each provider
   api:
     # OpenAI/ChatGPT settings
@@ -72,35 +77,63 @@ llm:
   # Text cleaning prompt - This is sent to the LLM to clean PDF text
   # You can customize this prompt to handle specific types of documents
   cleaning_prompt: |
-    I'm building a tool to clean and prepare documents for text-to-speech (TTS) processing. Please process the following PDF text with the following instructions:
+    Please process the following PDF text with these instructions:
 
-    1. **Remove all non-essential elements**, including:
-      - Headers, footers, and page numbers (even if repeated).
-      - Website artifacts such as cookie banners, navigation menus, ads, comments, and any content that is not part of the main article or body text.
-      - For PDFs with a **book layout** (two pages per physical page), split and clean both pages accordingly.
-
-    2. **Preserve the main content only** — ensure the body text remains intact and fully readable.
-
-    3. **Fix formatting issues**, including:
-      - Removing unnecessary line breaks within sentences.
-      - Correcting broken words split across lines.
-      - Fixing OCR-related errors (e.g., misplaced characters, garbled words).
-
-    4. **Maintain natural paragraph structure** to ensure smooth flow for TTS.
-
-    5. **Do not include any commentary, explanations, or metadata** — return only the cleaned, plain text.
+    1. **Remove non-essential elements**: headers, footers, page numbers, and website artifacts (menus, ads, etc.).
+    2. **Preserve main content**: ensure the body text remains intact.
+    3. **Fix formatting**: remove unnecessary line breaks, correct broken words, and fix OCR errors.
+    4. **Maintain paragraph structure**.
+    5. **Return only the cleaned text** with no commentary.
 
     Text to clean:
+
+  # SSML enhancement prompt - This is sent to the LLM to add SSML tags
+  ssml_prompt: |
+    You are an SSML expert. Your task is to convert a plain text chunk into a valid SSML document.
+    The text provided is a small chunk of a larger document. You must follow these rules:
+
+    1. **ALWAYS wrap the entire output in a single `<speak>` tag.** The output MUST be a valid SSML document.
+    2. **Structure the content** using `<p>` for paragraphs and `<s>` for sentences.
+    3. **Add pauses** between paragraphs or where appropriate using `<break time="500ms"/>`.
+    4. **Do not add any commentary or explanations.** Return only the raw SSML.
+    5. Use `<prosody rate="slow">` or `<prosody pitch="low">` for dramatic, reflective, or slower parts.
+    6.**Detect and format dialogue**. If the text contains conversational structure — for example:
+
+        ```
+        - ¿Te ha gustado? –preguntó él.
+        - ¡Sí! –dijo ella–. Me encantó.
+        ```
+
+        Then:
+        - Add `<break time="300ms"/>` between speaker turns.
+        - Optionally, vary pitch or rate per speaker to improve clarity.
+
+      - All SSML tags must be valid XML.
+
+    7. If `use_ssml` is `false`, return only the cleaned plain text with no SSML enhancements.
+
+
+    Example Input:
+    This is the first sentence. This is the second sentence.
+
+    Example Output:
+    <speak><s>This is the first sentence.</s><s>This is the second sentence.</s></speak>
+
+    Now, process the following text chunk:
+
 
 # ============================================================================
 # OUTPUT CONFIGURATION
 # ============================================================================
 output:
   # Save original extracted text from PDF (useful for debugging)
-  save_raw_text: false
+  save_raw_text: true
 
   # Save LLM-cleaned text (useful for reviewing cleaning quality)
-  save_cleaned_text: false
+  save_cleaned_text: true
+
+  # Save cleaned text chunks (useful for debugging chunking issues)
+  save_cleaned_chunks: false
 
   # Enable verbose logging (shows processing steps and progress)
   verbose: true
