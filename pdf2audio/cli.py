@@ -71,7 +71,7 @@ Examples:
     )
     parser.add_argument(
         '--ttsprovider',
-        choices=['gtts', 'openai', 'aws'],
+        choices=['gtts', 'openai', 'aws', 'google'],
         help='TTS provider (overrides config)'
     )
     parser.add_argument(

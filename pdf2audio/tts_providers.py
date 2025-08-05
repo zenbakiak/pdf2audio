@@ -9,6 +9,11 @@ import boto3
 from pydub import AudioSegment
 from .config import Config
 
+try:
+    from google.cloud import texttospeech
+except ImportError:
+    texttospeech = None
+
 
 def chunk_text(text: str, max_length: int = 4000) -> List[str]:
     """Split text into chunks that respect sentence boundaries."""
@@ -303,6 +308,99 @@ class AWSTTS(TTSProvider):
                     os.remove(temp_file)
 
 
+class GoogleCloudTTS(TTSProvider):
+    """Google Cloud Text-to-Speech provider."""
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        if texttospeech is None:
+            raise ImportError(
+                "Google Cloud Text-to-Speech library not found. "
+                "Please install it with: pip install google-cloud-texttospeech"
+            )
+        self.client = self._create_client()
+
+    def _create_client(self):
+        """Create Google Cloud TTS client."""
+        credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if not credentials_path:
+            raise ValueError(
+                "GOOGLE_APPLICATION_CREDENTIALS environment variable not set. "
+                "Please set it to the path of your Google Cloud service account key file."
+            )
+        
+        # Expand the tilde to the user's home directory
+        expanded_path = os.path.expanduser(credentials_path)
+
+        if not os.path.exists(expanded_path):
+            raise FileNotFoundError(
+                f"The service account key file was not found at the specified path: {expanded_path}"
+            )
+
+        # It's good practice to update the environment variable for the client library to use
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = expanded_path
+        
+        return texttospeech.TextToSpeechClient()
+
+    def get_max_chunk_size(self, is_ssml: bool = False) -> int:
+        """Get max chunk size for Google Cloud TTS."""
+        return 4800 if is_ssml else 5000
+
+    def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
+        """Synthesize text using Google Cloud TTS."""
+        voice_config = self.config.get_tts_config('google')
+        speaking_rate = self.config.speaking_rate
+        
+        is_ssml = len(chunks) > 0 and chunks[0].strip().startswith('<speak>')
+        
+        audio_segments = []
+        temp_files = []
+
+        try:
+            for i, chunk in enumerate(chunks):
+                temp_file = output_path.replace('.mp3', f'_chunk_{i}.mp3')
+                temp_files.append(temp_file)
+
+                if self.config.verbose:
+                    print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
+
+                if is_ssml:
+                    synthesis_input = texttospeech.SynthesisInput(ssml=chunk)
+                else:
+                    synthesis_input = texttospeech.SynthesisInput(text=chunk)
+                
+                voice = texttospeech.VoiceSelectionParams(
+                    language_code=voice_config.get('language_code', 'en-US'),
+                    name=voice_config.get('voice_name', 'en-US-Studio-M')
+                )
+                audio_config = texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3,
+                    speaking_rate=speaking_rate
+                )
+
+                response = self.client.synthesize_speech(
+                    input=synthesis_input, voice=voice, audio_config=audio_config
+                )
+
+                with open(temp_file, "wb") as out:
+                    out.write(response.audio_content)
+                
+                audio_segments.append(AudioSegment.from_mp3(temp_file))
+
+            # Combine all audio segments
+            if self.config.verbose:
+                print("Combining audio chunks...")
+            
+            combined_audio = sum(audio_segments)
+            combined_audio.export(output_path, format="mp3")
+
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+
+
 class TTSFactory:
     """Factory for creating TTS providers."""
     
@@ -312,7 +410,8 @@ class TTSFactory:
         providers = {
             'gtts': GoogleTTS,
             'openai': OpenAITTS,
-            'aws': AWSTTS
+            'aws': AWSTTS,
+            'google': GoogleCloudTTS
         }
         
         provider_class = providers.get(provider_name.lower())

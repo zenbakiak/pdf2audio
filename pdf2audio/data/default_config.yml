@@ -48,6 +48,16 @@ tts:
       # Spanish: Lupe (female), Miguel (male), Conchita (Spain, female)
       # See AWS Polly documentation for complete voice list
 
+    # Google Cloud TTS - Studio-quality voices
+    google:
+      language_code: "es-US"
+      voice_name: "es-US-Studio-B"  # Male studio voice
+      # Other popular voices:
+      # en-US-Studio-O (Female)
+      # en-US-Wavenet-D (Male)
+      # en-US-Wavenet-F (Female)
+      # See Google Cloud TTS documentation for more voices
+
 # ============================================================================
 # LARGE LANGUAGE MODEL (LLM) CONFIGURATION
 # ============================================================================
@@ -57,7 +67,7 @@ llm:
   provider: "openai"
 
   # Add SSML tags to the output to improve the TTS experience.
-  # This is only supported by some TTS providers (e.g., AWS Polly).
+  # This is only supported by some TTS providers (e.g., AWS Polly, Google Cloud TTS).
   # Options: true, false
   use_ssml: false
 
@@ -79,11 +89,12 @@ llm:
   cleaning_prompt: |
     Please process the following PDF text with these instructions:
 
-    1. **Remove non-essential elements**: headers, footers, page numbers, and website artifacts (menus, ads, etc.).
-    2. **Preserve main content**: ensure the body text remains intact.
-    3. **Fix formatting**: remove unnecessary line breaks, correct broken words, and fix OCR errors.
-    4. **Maintain paragraph structure**.
-    5. **Return only the cleaned text** with no commentary.
+    1. Preserve first header, introduction or table of contents.
+    2. **Remove non-essential elements**: headers, footers, page numbers, and website artifacts (menus, ads, etc.) only if it repeats.
+    3 **Preserve main content**: ensure the body text remains intact.
+    4. **Fix formatting**: remove unnecessary line breaks, correct broken words, and fix OCR errors.
+    5. **Maintain paragraph structure**.
+    6. **Return only the cleaned text** with no commentary.
 
     Text to clean:
 
@@ -96,22 +107,6 @@ llm:
     2. **Structure the content** using `<p>` for paragraphs and `<s>` for sentences.
     3. **Add pauses** between paragraphs or where appropriate using `<break time="500ms"/>`.
     4. **Do not add any commentary or explanations.** Return only the raw SSML.
-    5. Use `<prosody rate="slow">` or `<prosody pitch="low">` for dramatic, reflective, or slower parts.
-    6.**Detect and format dialogue**. If the text contains conversational structure — for example:
-
-        ```
-        - ¿Te ha gustado? –preguntó él.
-        - ¡Sí! –dijo ella–. Me encantó.
-        ```
-
-        Then:
-        - Add `<break time="300ms"/>` between speaker turns.
-        - Optionally, vary pitch or rate per speaker to improve clarity.
-
-      - All SSML tags must be valid XML.
-
-    7. If `use_ssml` is `false`, return only the cleaned plain text with no SSML enhancements.
-
 
     Example Input:
     This is the first sentence. This is the second sentence.

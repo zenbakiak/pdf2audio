@@ -3,6 +3,7 @@ gtts==2.5.1
 pyyaml==6.0.1
 openai>=1.35.0,<2.0.0
 google-generativeai==0.8.3
+google-cloud-texttospeech==2.16.2
 pydub==0.25.1
 boto3==1.35.75
 python-dotenv==1.0.1

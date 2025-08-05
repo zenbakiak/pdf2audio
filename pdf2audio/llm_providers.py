@@ -81,7 +81,7 @@ class OpenAILLM(LLMProvider):
             response = self.client.chat.completions.create(
                 model=llm_config.get('model', 'gpt-3.5-turbo'),
                 messages=[
-                    {"role": "system", "content": "You are an SSML tagging assistant."}, 
+                    {"role": "system", "content": "You are an SSML tagging assistant."},
                     {"role": "user", "content": f"{prompt}\n\n{text}"}
                 ],
                 max_tokens=llm_config.get('max_tokens', 4000),

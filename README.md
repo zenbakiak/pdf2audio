@@ -135,7 +135,7 @@ pdf2audio --pdf=assets/test.pdf --mp3=assets/test.mp3 \
 - `--config`: Path to config file (default: config.yml)
 - `--no-llm`: Skip AI text cleaning
 - `--cleaner-llm`: LLM provider for text cleaning (openai|gemini) - overrides config
-- `--ttsprovider`: TTS provider (gtts|openai|aws) - overrides config
+- `--ttsprovider`: TTS provider (gtts|openai|aws|google) - overrides config
 
 ### Language Codes
 
@@ -184,6 +184,19 @@ tts:
       # voice_id: "Matthew"  # Male
       # voice_id: "Lupe"     # Spanish Female
       engine: "neural"  # standard or neural
+
+#### Google Cloud TTS (Premium)
+```yaml
+tts:
+  provider: "google"
+  voice:
+    google:
+      language_code: "en-US"
+      voice_name: "en-US-Studio-M" # Male studio voice
+      # Other popular voices:
+      # en-US-Studio-O (Female)
+      # en-US-Wavenet-D (Male)
+      # en-US-Wavenet-F (Female)
 ```
 
 ## Examples
