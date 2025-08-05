@@ -39,6 +39,24 @@ class ContentCleaner:
             print(f"Cleaning text with {self.config.llm_provider}...")
         
         return self.provider.clean_text(text)
+
+    def apply_ssml(self, text: str) -> str:
+        """
+        Apply SSML tags to the text using the configured LLM provider.
+        
+        Args:
+            text: Cleaned text to be enhanced with SSML
+            
+        Returns:
+            Text with SSML tags
+        """
+        if not text:
+            return text
+        
+        if self.config.verbose:
+            print(f"Applying SSML with {self.config.llm_provider}...")
+        
+        return self.provider.apply_ssml(text)
     
     def set_provider(self, provider_name: str) -> None:
         """

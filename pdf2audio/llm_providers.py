@@ -19,6 +19,11 @@ class LLMProvider(ABC):
         """Clean text using the LLM provider."""
         pass
 
+    @abstractmethod
+    def apply_ssml(self, text: str) -> str:
+        """Apply SSML tags to the text using the LLM provider."""
+        pass
+
 
 class OpenAILLM(LLMProvider):
     """OpenAI LLM provider for text cleaning."""
@@ -64,6 +69,32 @@ class OpenAILLM(LLMProvider):
                 print("Proceeding with original text...")
             return text
 
+    def apply_ssml(self, text: str) -> str:
+        """Apply SSML tags to the text using OpenAI."""
+        if not text:
+            return text
+        
+        llm_config = self.config.get_llm_config('openai')
+        prompt = self.config.ssml_prompt
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                messages=[
+                    {"role": "system", "content": "You are an SSML tagging assistant."},
+                    {"role": "user", "content": f"{prompt}\n\n{text}"}
+                ],
+                max_tokens=llm_config.get('max_tokens', 4000),
+                temperature=llm_config.get('temperature', 0.1)
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            if self.config.verbose:
+                print(f"Error applying SSML with OpenAI: {e}")
+                print("Proceeding with original text...")
+            return text
+
 
 class GeminiLLM(LLMProvider):
     """Google Gemini LLM provider for text cleaning."""
@@ -95,6 +126,24 @@ class GeminiLLM(LLMProvider):
         except Exception as e:
             if self.config.verbose:
                 print(f"Error cleaning text with Gemini: {e}")
+                print("Proceeding with original text...")
+            return text
+
+    def apply_ssml(self, text: str) -> str:
+        """Apply SSML tags to the text using Gemini."""
+        if not text:
+            return text
+        
+        llm_config = self.config.get_llm_config('gemini')
+        prompt = self.config.ssml_prompt
+        
+        try:
+            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
+            response = model.generate_content(f"{prompt}\n\n{text}")
+            return response.text
+        except Exception as e:
+            if self.config.verbose:
+                print(f"Error applying SSML with Gemini: {e}")
                 print("Proceeding with original text...")
             return text
 

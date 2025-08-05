@@ -79,6 +79,10 @@ On first run, the CLI automatically creates:
    # For premium TTS
    AWS_ACCESS_KEY_ID=your_key_here
    AWS_SECRET_ACCESS_KEY=your_key_here
+
+   # For Google Cloud TTS
+   # Set the path to your service account key file
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/google-cloud-key.json
    ```
 
 ## Available Commands

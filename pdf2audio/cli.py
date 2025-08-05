@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from .config import Config
 from .processors import PDFProcessor, ContentCleaner, TextToSpeechProcessor
+from .tts_providers import chunk_text
 
 
 def load_environment():
@@ -70,13 +71,23 @@ Examples:
     )
     parser.add_argument(
         '--ttsprovider',
-        choices=['gtts', 'openai', 'aws'],
+        choices=['gtts', 'openai', 'aws', 'google'],
         help='TTS provider (overrides config)'
     )
     parser.add_argument(
         '--verbose',
         action='store_true',
         help='Enable verbose output'
+    )
+    parser.add_argument(
+        '--use-ssml',
+        action='store_true',
+        help='Enable SSML for TTS'
+    )
+    parser.add_argument(
+        '--save-chunks',
+        action='store_true',
+        help='Save cleaned text chunks to files'
     )
     
     return parser
@@ -127,6 +138,12 @@ def main():
         
         if args.verbose:
             config.set('output.verbose', True)
+
+        if args.use_ssml:
+            config.set('llm.use_ssml', True)
+        
+        if args.save_chunks:
+            config.set('output.save_cleaned_chunks', True)
         
         # Initialize processors
         pdf_processor = PDFProcessor(config)
@@ -143,10 +160,10 @@ def main():
         
         # Save raw text if configured
         if config.should_save_raw_text():
-            raw_output = Path(args.mp3).with_suffix('_raw.txt')
-            with open(raw_output, 'w', encoding='utf-8') as f:
+            raw_output_path = Path(args.mp3.replace('.mp3', '_raw.txt'))
+            with open(raw_output_path, 'w', encoding='utf-8') as f:
                 f.write(text)
-            print(f"Raw text saved to: {raw_output}")
+            print(f"Raw text saved to: {raw_output_path}")
         
         # Clean text if LLM is enabled
         if content_cleaner:
@@ -157,16 +174,45 @@ def main():
             cleaned_text = text
         
         # Save cleaned text if configured
-        if config.should_save_cleaned_text():
-            cleaned_output = Path(args.mp3).with_suffix('_cleaned.txt')
-            with open(cleaned_output, 'w', encoding='utf-8') as f:
+        if config.should_save_cleaned_text() and content_cleaner:
+            cleaned_output_path = Path(args.mp3.replace('.mp3', '_cleaned.txt'))
+            with open(cleaned_output_path, 'w', encoding='utf-8') as f:
                 f.write(cleaned_text)
-            print(f"Cleaned text saved to: {cleaned_output}")
+            print(f"Cleaned text saved to: {cleaned_output_path}")
+
+        # Chunk the text
+        max_chunk_size = tts_processor.provider.get_max_chunk_size(is_ssml=args.use_ssml)
+        chunks = chunk_text(cleaned_text, max_chunk_size)
+        
+        # Save cleaned chunks if configured
+        if config.should_save_cleaned_chunks():
+            for i, chunk in enumerate(chunks):
+                chunk_path = Path(args.mp3.replace('.mp3', f'_cleaned_chunk_{i}.txt'))
+                with open(chunk_path, 'w', encoding='utf-8') as f:
+                    f.write(chunk)
+            print(f"Saved {len(chunks)} cleaned chunks.")
+
+        # Apply SSML if enabled
+        if args.use_ssml:
+            if not content_cleaner:
+                print("Warning: --use-ssml requires an LLM cleaner. Skipping SSML.")
+                final_chunks = chunks
+            else:
+                print(f"Applying SSML to {len(chunks)} chunks...")
+                final_chunks = [content_cleaner.apply_ssml(chunk) for chunk in chunks]
+                # Save SSML text if configured
+                if config.should_save_cleaned_text():
+                    ssml_output_path = Path(args.mp3.replace('.mp3', '_ssml.txt'))
+                    with open(ssml_output_path, 'w', encoding='utf-8') as f:
+                        f.write("\n\n---\n\n".join(final_chunks))
+                    print(f"SSML text saved to: {ssml_output_path}")
+        else:
+            final_chunks = chunks
         
         # Convert to speech
         print(f"Converting to speech with {config.tts_provider}...")
         language = config.get('tts.default_language', 'en')
-        tts_processor.synthesize(cleaned_text, args.mp3, language)
+        tts_processor.synthesize(final_chunks, args.mp3, language)
         
         print(f"✅ Audio file created: {args.mp3}")
         
