@@ -15,7 +15,7 @@ if (this_directory / "requirements.txt").exists():
 
 setup(
     name="pdf2audio",
-    version="2.0.0",
+    version="2.1.0",
     author="zenbakiak",
     author_email="zenbakiak@users.noreply.github.com",
     description="Convert PDF documents to audio using various TTS providers and AI-powered text cleaning",

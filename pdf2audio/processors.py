@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-from typing import Optional
+from typing import Optional, List
+import re
 import os
 from .config import Config
 from .llm_providers import LLMFactory
-from .tts_providers import TTSFactory
+from .tts_providers import TTSFactory, chunk_text
 
 
 class ContentCleaner:
@@ -37,8 +38,34 @@ class ContentCleaner:
         
         if self.config.verbose:
             print(f"Cleaning text with {self.config.llm_provider}...")
-        
-        return self.provider.clean_text(text)
+
+        # Optional pre-cleaning to remove headers/footers, page numbers, and boilerplate
+        if self.config.get('llm.preclean', True):
+            if self.config.verbose:
+                print("Applying pre-cleaning heuristics...")
+            text = preclean_text(text,
+                                 min_repeats=int(self.config.get('llm.preclean_min_repeats', 3)),
+                                 max_line_len=int(self.config.get('llm.preclean_max_line_length', 80)))
+
+        # Chunk text to avoid hitting LLM context limits
+        max_chunk_chars = self.config.get('llm.max_chunk_chars', 20000)
+        strategy = self.config.get('llm.chunk_strategy', 'paragraph_sentence_word')
+        if strategy == 'paragraph_sentence_word':
+            pieces = chunk_text_paragraph_sentence_word(text, max_chunk_chars)
+        else:
+            # Fallback to sentence->word strategy
+            pieces = chunk_text(text, max_chunk_chars)
+
+        if self.config.verbose and len(pieces) > 1:
+            print(f"Cleaning in {len(pieces)} chunks to respect context limits...")
+
+        cleaned_chunks: List[str] = []
+        for i, piece in enumerate(pieces):
+            if self.config.verbose and len(pieces) > 1:
+                print(f"  - Cleaning chunk {i+1}/{len(pieces)} ({len(piece)} chars)")
+            cleaned_chunks.append(self.provider.clean_text(piece))
+
+        return "\n\n".join(cleaned_chunks)
 
     def apply_ssml(self, text: str) -> str:
         """
@@ -55,8 +82,101 @@ class ContentCleaner:
         
         if self.config.verbose:
             print(f"Applying SSML with {self.config.llm_provider}...")
-        
-        return self.provider.apply_ssml(text)
+
+        # Chunk to avoid LLM context issues when tagging SSML
+        max_chunk_chars = self.config.get('llm.max_chunk_chars', 20000)
+        strategy = self.config.get('llm.chunk_strategy', 'paragraph_sentence_word')
+        if strategy == 'paragraph_sentence_word':
+            pieces = chunk_text_paragraph_sentence_word(text, max_chunk_chars)
+        else:
+            pieces = chunk_text(text, max_chunk_chars)
+
+        if self.config.verbose and len(pieces) > 1:
+            print(f"Applying SSML in {len(pieces)} chunks...")
+
+        ssml_chunks: List[str] = []
+        for i, piece in enumerate(pieces):
+            if self.config.verbose and len(pieces) > 1:
+                print(f"  - SSML chunk {i+1}/{len(pieces)} ({len(piece)} chars)")
+            ssml_chunks.append(self.provider.apply_ssml(piece))
+
+        return "\n\n".join(ssml_chunks)
+    
+    def summarize(self, text: str, target_language: Optional[str] = None) -> str:
+        """
+        Summarize text into a concise, audiobook-style narrative using the LLM provider.
+        Applies pre-cleaning and chunking similar to cleaning, then merges summaries.
+        """
+        if not text:
+            return text
+
+        if self.config.verbose:
+            print(f"Summarizing with {self.config.llm_provider}...")
+
+        # Optional pre-cleaning to reduce noise before summarization
+        if self.config.get('llm.preclean', True):
+            if self.config.verbose:
+                print("Applying pre-cleaning heuristics before summarization...")
+            text = preclean_text(text,
+                                 min_repeats=int(self.config.get('llm.preclean_min_repeats', 3)),
+                                 max_line_len=int(self.config.get('llm.preclean_max_line_length', 80)))
+
+        max_chunk_chars = self.config.get('llm.max_chunk_chars', 20000)
+        strategy = self.config.get('llm.chunk_strategy', 'paragraph_sentence_word')
+        pieces = chunk_text_paragraph_sentence_word(text, max_chunk_chars) if strategy == 'paragraph_sentence_word' else chunk_text(text, max_chunk_chars)
+
+        # Compute target summary length (in words)
+        total_words = len(text.split())
+        min_ratio = float(self.config.get('llm.min_summary_ratio', 0.45))
+        target_words = max(1, int(total_words * min_ratio))
+
+        if self.config.verbose and len(pieces) > 1:
+            print(f"Summarizing in {len(pieces)} chunks, then merging...")
+
+        summaries: List[str] = []
+        for i, piece in enumerate(pieces):
+            if self.config.verbose and len(pieces) > 1:
+                print(f"  - Summarizing chunk {i+1}/{len(pieces)} ({len(piece)} chars)")
+            # Per-chunk target words proportional to piece size
+            piece_words = len(piece.split())
+            piece_target = max(1, int(piece_words * min_ratio))
+            try:
+                summaries.append(self.provider.summarize_text(piece, language=target_language, target_words=piece_target))
+            except TypeError:
+                # Backward compatibility with providers lacking new parameters
+                try:
+                    summaries.append(self.provider.summarize_text(piece, language=target_language))
+                except TypeError:
+                    summaries.append(self.provider.summarize_text(piece))
+
+        if len(summaries) == 1:
+            return summaries[0]
+
+        # Merge chunk summaries into a cohesive single summary
+        merged_input = "\n\n".join(summaries)
+        try:
+            merged = self.provider.merge_summaries(merged_input, language=target_language, target_words=target_words)
+        except TypeError:
+            try:
+                merged = self.provider.merge_summaries(merged_input, language=target_language)
+            except TypeError:
+                merged = self.provider.merge_summaries(merged_input)
+
+        # Ensure minimum length; expand once if too short
+        tolerance = float(self.config.get('llm.summary_ratio_tolerance', 0.9))
+        if len(merged.split()) < int(target_words * tolerance):
+            if self.config.verbose:
+                print("Merged summary below target length; expanding...")
+            try:
+                expanded = self.provider.expand_summary(merged, source=merged_input, language=target_language, target_words=target_words)
+            except TypeError:
+                try:
+                    expanded = self.provider.expand_summary(merged, target_words=target_words)
+                except TypeError:
+                    expanded = merged
+            return expanded
+
+        return merged
     
     def set_provider(self, provider_name: str) -> None:
         """
@@ -84,16 +204,16 @@ class TextToSpeechProcessor:
             self._provider = TTSFactory.create_provider(provider_name, self.config)
         return self._provider
     
-    def synthesize(self, text: str, output_path: str, language: Optional[str] = None) -> None:
+    def synthesize(self, chunks: List[str], output_path: str, language: Optional[str] = None) -> None:
         """
-        Convert text to speech using the configured TTS provider.
+        Convert text chunks to speech using the configured TTS provider.
         
         Args:
-            text: Text to convert to speech
+            chunks: List of text chunks to convert to speech
             output_path: Path where to save the audio file
             language: Language code (optional, uses config default)
         """
-        if not text:
+        if not chunks:
             raise ValueError("Text cannot be empty")
         
         # Use provided language or get from config
@@ -114,14 +234,14 @@ class TextToSpeechProcessor:
         # Validate speaking rate if it's not 1.0
         speaking_rate = self.config.speaking_rate
         if speaking_rate != 1.0:
-            from tts_providers import validate_speaking_rate
+            from .tts_providers import validate_speaking_rate
             validate_speaking_rate(speaking_rate)
         
         if self.config.verbose:
             print(f"Converting text to speech (language: {lang_code})")
         
         # Synthesize audio
-        self.provider.synthesize(text, output_path, lang_code)
+        self.provider.synthesize(chunks, output_path, lang_code)
         
         if self.config.verbose:
             print(f"Audio saved to: {output_path}")
@@ -216,8 +336,104 @@ class PDFProcessor:
             if self.config.should_save_cleaned_text():
                 self.save_text_file(cleaned_text, output_path, 'cleaned')
         
-        # Convert to speech
-        self.tts_processor.synthesize(cleaned_text, output_path, language)
+        # Chunk text and convert to speech
+        max_chunk = self.tts_processor.provider.get_max_chunk_size(is_ssml=False)
+        chunks = chunk_text(cleaned_text, max_chunk)
+        self.tts_processor.synthesize(chunks, output_path, language)
         
         if self.config.verbose:
             print("Conversion completed successfully!")
+
+
+def chunk_text_paragraph_sentence_word(text: str, max_length: int) -> List[str]:
+    """
+    Chunk text preferring paragraph boundaries first, then sentences, then words.
+    Ensures words are not split unless a single word exceeds max_length.
+    """
+    if len(text) <= max_length:
+        return [text]
+
+    chunks: List[str] = []
+    current = ""
+
+    # Split paragraphs on blank lines
+    paragraphs = re.split(r"\n\s*\n+", text)
+
+    def pack_sentence_word(s: str) -> List[str]:
+        return chunk_text(s, max_length)
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # If it fits into current chunk, append with paragraph break
+        sep = "\n\n" if current else ""
+        if current and len(current) + len(sep) + len(para) <= max_length:
+            current = f"{current}{sep}{para}"
+            continue
+
+        # If paragraph alone fits in an empty chunk
+        if len(para) <= max_length and not current:
+            current = para
+            continue
+
+        # Paragraph too large; split by sentence->word
+        pchunks = pack_sentence_word(para)
+
+        if current:
+            # Flush current before adding paragraph chunks
+            chunks.append(current)
+            current = ""
+
+        # Keep the last subchunk open for potential packing with next paragraph
+        if len(pchunks) > 1:
+            chunks.extend(pchunks[:-1])
+            current = pchunks[-1]
+        else:
+            # Single subchunk already exceeds capacity earlier; set as current
+            current = pchunks[0]
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+def preclean_text(text: str, min_repeats: int = 3, max_line_len: int = 80) -> str:
+    """
+    Remove common headers/footers and boilerplate before LLM cleaning.
+    - Drops short lines that repeat at least `min_repeats` times across the doc.
+    - Removes page number patterns like "Page X" or lines that are only digits.
+    - Removes standalone URLs.
+    Preserves blank lines to keep paragraph boundaries.
+    """
+    lines = text.splitlines()
+    # Count normalized line frequencies
+    from collections import Counter
+    norm = [ln.strip() for ln in lines]
+    freq = Counter([ln for ln in norm if ln])
+
+    out: List[str] = []
+    for original, stripped in zip(lines, norm):
+        if stripped == "":
+            out.append("")
+            continue
+
+        # Drop frequent short lines (likely header/footer)
+        if len(stripped) <= max_line_len and freq.get(stripped, 0) >= min_repeats:
+            continue
+
+        low = stripped.lower()
+        # Common page number/footer patterns
+        if re.match(r"^(page\s+\d+(\s+of\s+\d+)?)$", low):
+            continue
+        if re.match(r"^\d+$", stripped):
+            continue
+        # Standalone URL
+        if re.match(r"^https?://\S+$", stripped):
+            continue
+
+        out.append(original)
+
+    return "\n".join(out)

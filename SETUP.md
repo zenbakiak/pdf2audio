@@ -121,6 +121,25 @@ tts.set_provider('aws')
 
 **Voice not working**: Check voice name spelling in your provider's documentation
 
+## LLM Chunking (Context Limits)
+
+Long PDFs can exceed LLM context limits. You can tune chunking behavior:
+
+Config (`~/.pdf2audio/config.yml`):
+```yaml
+llm:
+  chunk_strategy: paragraph_sentence_word  # or sentence_word
+  max_chunk_chars: 20000                   # reduce if still too large
+```
+
+CLI overrides (when using the `pdf2audio` CLI):
+```bash
+pdf2audio --pdf document.pdf --mp3 out.mp3 \
+  --cleaner-llm openai \
+  --llm-chunk-strategy paragraph_sentence_word \
+  --llm-chunk-chars 15000
+```
+
 ## File Structure
 ```
 pdf-audiobook/

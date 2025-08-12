@@ -26,6 +26,7 @@ tts:
   # Maps non-standard codes to standard ones
   language_mappings:
     es_la: "es"    # Spanish Latin America -> Spanish
+    es-MX: "es"    # Spanish Mexico -> Spanish (gTTS)
     en_us: "en"    # English US -> English
     en_uk: "en"    # English UK -> English
 
@@ -71,6 +72,11 @@ llm:
   # Options: true, false
   use_ssml: false
 
+  # Pre-cleaning (remove headers/footers and boilerplate before LLM)
+  preclean: true
+  preclean_min_repeats: 3        # lines seen >= this many times and short are dropped
+  preclean_max_line_length: 80   # maximum length for a line to be considered boilerplate
+
   # API configuration for each provider
   api:
     # OpenAI/ChatGPT settings
@@ -84,19 +90,54 @@ llm:
       model: "gemini-pro"       # Current Gemini model
       temperature: 0.1          # Lower = more consistent, higher = more creative
 
+  # Chunking behavior for LLM cleaning/SSML
+  # Strategy options:
+  #   - paragraph_sentence_word: prefer paragraphs, then sentences, then words
+  #   - sentence_word: fallback to sentence-first, then words
+  chunk_strategy: paragraph_sentence_word
+
+  # Maximum characters per cleaned chunk sent to the LLM
+  # Reduce if you still hit model context limits
+  max_chunk_chars: 20000
+
+  # Summarization length control
+  # Minimum ratio of summary length relative to original text (by word count)
+  min_summary_ratio: 0.45
+  # Tolerance when checking final length (fraction of target words acceptable before expansion)
+  summary_ratio_tolerance: 0.9
+
   # Text cleaning prompt - This is sent to the LLM to clean PDF text
   # You can customize this prompt to handle specific types of documents
   cleaning_prompt: |
-    Please process the following PDF text with these instructions:
+    You are cleaning raw text extracted from a paginated PDF for audiobook narration. Apply these rules:
 
-    1. Preserve first header, introduction or table of contents.
-    2. **Remove non-essential elements**: headers, footers, page numbers, and website artifacts (menus, ads, etc.) only if it repeats.
-    3 **Preserve main content**: ensure the body text remains intact.
-    4. **Fix formatting**: remove unnecessary line breaks, correct broken words, and fix OCR errors.
-    5. **Maintain paragraph structure**.
-    6. **Return only the cleaned text** with no commentary.
+    MUST REMOVE (when present):
+    - Repeating page headers/footers and page numbers (e.g., "Page 12", "12 of 20", "www.philosophia.cl").
+    - Boilerplate like website navigation, copyright notices, or running titles.
+    - Footnotes/endnotes and citation markers that interrupt reading flow (e.g., [1], [12], (1), (2017)).
+    - Figure/table numbers and captions unless essential to understanding the text.
+
+    MUST KEEP:
+    - Main body content and logical structure; preserve paragraph boundaries.
+    - Section headings and subheadings that help navigation.
+    - In-line math/code verbatim; do not mangle technical notation.
+
+    FORMATTING FIXES:
+    - Merge broken lines within paragraphs; keep a blank line between paragraphs.
+    - Fix hyphenated word breaks across line-wrapping when obvious.
+    - Correct common OCR errors while preserving meaning.
+
+    OUTPUT:
+    - Return ONLY the cleaned text with no commentary.
 
     Text to clean:
+
+  # Summary prompts
+  summary_prompt: |
+    Create a concise, audiobook-style summary of the following text. Focus on the main narrative/argument and key points. Remove footnotes, tables, figures, citations, and boilerplate. Keep a clear, engaging flow suitable for listening. Return only the summarized text.
+
+  summary_merge_prompt: |
+    Merge and condense the following chunk summaries into a single, cohesive audiobook-style summary. Remove repetition, keep logical order, and preserve only the most important ideas and transitions. Return only the final summary.
 
   # SSML enhancement prompt - This is sent to the LLM to add SSML tags
   ssml_prompt: |

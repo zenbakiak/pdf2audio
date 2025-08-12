@@ -153,7 +153,21 @@ pdf2audio --pdf document.pdf --mp3 audio.mp3 --ttsprovider google --use-ssml
 
 # Skip AI text cleaning for a faster conversion
 pdf2audio --pdf document.pdf --mp3 output.mp3 --no-llm
+
+# Generate a summarized audiobook (requires LLM)
+pdf2audio --pdf document.pdf --mp3 summary.mp3 --summarize --cleaner-llm openai
 ```
+
+### Output Artifacts
+
+When configured to save intermediary text, files are organized next to the output MP3 inside a folder named after the MP3 filename (without extension):
+
+- Raw extracted text: `<mp3_dir>/<mp3_stem>/<mp3_stem>_raw.txt`
+- Cleaned text (when LLM enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_cleaned.txt`
+- SSML text (when LLM+SSML enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_ssml.txt`
+- Cleaned chunks (if enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_chunks/chunk_<n>.txt`
+
+This structure keeps your project directory tidy by avoiding many loose files.
 
 ### Available Parameters
 
@@ -166,6 +180,48 @@ pdf2audio --pdf document.pdf --mp3 output.mp3 --no-llm
 - `--ttsprovider`: Specify the TTS provider (`gtts`, `openai`, `aws`, `google`).
 - `--use-ssml`: Enable SSML for advanced speech synthesis (only for `aws` and `google` providers).
 - `--verbose`: Enable detailed logging.
+- `--llm-chunk-strategy`: Chunking strategy for LLM cleaning/SSML. Options: `paragraph_sentence_word` (default), `sentence_word`.
+- `--llm-chunk-chars`: Maximum characters per chunk for LLM cleaning/SSML (default `20000`).
+- `--dry-run`: Extract and chunk only; skips LLM and TTS.
+- `--summarize`: Generate an audiobook-style summary (requires `--cleaner-llm`).
+- `--summary-lang`: Override the language used for the summary text (defaults to `--lang` or config language).
+
+### LLM Chunking Controls
+
+Long PDFs can exceed LLM context limits. Control how text is split before cleaning or SSML tagging:
+
+- Strategy (config key `llm.chunk_strategy`):
+  - `paragraph_sentence_word` (default): split on paragraphs first, then sentences, then words.
+  - `sentence_word`: split on sentences first, then words.
+- Max size (config key `llm.max_chunk_chars`): integer character limit per chunk.
+
+Examples:
+```bash
+# Use paragraph-first chunking with smaller chunks
+pdf2audio --pdf doc.pdf --mp3 out.mp3 \
+  --cleaner-llm openai \
+  --llm-chunk-strategy paragraph_sentence_word \
+  --llm-chunk-chars 15000
+
+# Fall back to sentence-first strategy
+pdf2audio --pdf doc.pdf --mp3 out.mp3 --cleaner-llm gemini --llm-chunk-strategy sentence_word
+
+# Dry run: only extract and chunk, no LLM or TTS
+pdf2audio --pdf doc.pdf --mp3 out.mp3 --dry-run
+```
+
+### Cleaning Quality and Pre-Cleaning
+
+If headers/footers or page numbers leak into the audio, enable and tune pre-cleaning in `~/.pdf2audio/config.yml`:
+
+```yaml
+llm:
+  preclean: true
+  preclean_min_repeats: 3        # drop short lines repeating across pages
+  preclean_max_line_length: 80   # only treat short lines as boilerplate
+```
+
+The built-in pre-clean removes repeated short lines (likely headers/footers), page-number lines, and standalone URLs. The default LLM prompt also asks to remove footnotes/endnotes and citation markers while preserving main content and paragraph structure.
 
 ## Troubleshooting
 

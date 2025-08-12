@@ -103,6 +103,12 @@ pdf2audio --pdf assets/test.pdf --mp3 test.mp3 --no-llm --ttsprovider gtts
 
 # Test with OpenAI (requires API key)
 pdf2audio --pdf assets/test.pdf --mp3 test.mp3 --cleaner-llm openai --ttsprovider openai
+
+# Control LLM chunking to avoid context limits
+pdf2audio --pdf assets/1984.pdf --mp3 out.mp3 \
+  --cleaner-llm openai \
+  --llm-chunk-strategy paragraph_sentence_word \
+  --llm-chunk-chars 15000
 ```
 
 ## Troubleshooting
@@ -128,6 +134,16 @@ pip install -e . --user
 # Reset configuration directory
 rm -rf ~/.pdf2audio
 pdf2audio --help  # This will recreate the directory
+```
+
+### LLM Chunking Settings
+
+Adjust defaults in `~/.pdf2audio/config.yml` if long PDFs hit context limits:
+
+```yaml
+llm:
+  chunk_strategy: paragraph_sentence_word  # or sentence_word
+  max_chunk_chars: 20000                   # reduce if needed
 ```
 
 ### API Key Issues
