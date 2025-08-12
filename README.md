@@ -154,25 +154,33 @@ pdf2audio --pdf document.pdf --mp3 audio.mp3 --ttsprovider google --use-ssml
 # Skip AI text cleaning for a faster conversion
 pdf2audio --pdf document.pdf --mp3 output.mp3 --no-llm
 
-# Generate a summarized audiobook (requires LLM)
+# Generate a study-oriented summarized audiobook (requires LLM)
 pdf2audio --pdf document.pdf --mp3 summary.mp3 --summarize --cleaner-llm openai
+
+# Reprocess from a previous run (use the generated job file)
+pdf2audio --job out/summary.yml --mp3 out/summary_new.mp3 --no-llm
 ```
 
-### Output Artifacts
+### Output Artifacts & Job Manifests
 
-When configured to save intermediary text, files are organized next to the output MP3 inside a folder named after the MP3 filename (without extension):
+Artifacts are always saved beside the MP3 inside a folder named after the MP3 filename (without extension):
 
-- Raw extracted text: `<mp3_dir>/<mp3_stem>/<mp3_stem>_raw.txt`
-- Cleaned text (when LLM enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_cleaned.txt`
-- SSML text (when LLM+SSML enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_ssml.txt`
-- Cleaned chunks (if enabled): `<mp3_dir>/<mp3_stem>/<mp3_stem>_chunks/chunk_<n>.txt`
+- Raw text: `<mp3_dir>/<stem>/<stem>_raw.txt`
+- Cleaned/Summary text (when LLM used): `<mp3_dir>/<stem>/<stem>_cleaned.txt` or `<stem>_summary.txt`
+- SSML text (when applied): `<mp3_dir>/<stem>/<stem>_ssml.txt`
+- Chunks used for TTS: `<mp3_dir>/<stem>/<stem>_chunks/chunk_<n>.txt`
+- Job manifest (always): `<mp3_dir>/<stem>.yml` with parameters and artifact paths
 
-This structure keeps your project directory tidy by avoiding many loose files.
+You can edit the cleaned/summary text and reuse the job file to generate audio without re-running the LLM.
+
+### Study-Focused Summaries
+- The `--summarize` mode now produces a learning-focused, instructional narration that extracts the most important content (definitions, key ideas, arguments, examples) rather than a brief teaser.
+- Length is governed by `llm.min_summary_ratio` (default 0.45). Increase it in `~/.pdf2audio/config.yml` for more detail.
 
 ### Available Parameters
 
-- `--pdf`: Path to the input PDF file (required).
-- `--mp3`: Path to the output MP3 file (required).
+- `--pdf`: Path to the input PDF file (required unless `--job`).
+- `--mp3`: Path to the output MP3 file (required unless `--job` provides one).
 - `--lang`: Language code (e.g., `en`, `es_la`). Overrides the default in `config.yml`.
 - `--config`: Path to a custom configuration file.
 - `--no-llm`: Skip the AI text cleaning step.
@@ -185,6 +193,7 @@ This structure keeps your project directory tidy by avoiding many loose files.
 - `--dry-run`: Extract and chunk only; skips LLM and TTS.
 - `--summarize`: Generate an audiobook-style summary (requires `--cleaner-llm`).
 - `--summary-lang`: Override the language used for the summary text (defaults to `--lang` or config language).
+- `--job`: Resume/reprocess from a `.yml` job manifest (auto-created each run).
 
 ### LLM Chunking Controls
 

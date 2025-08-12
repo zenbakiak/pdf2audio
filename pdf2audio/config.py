@@ -170,14 +170,4 @@ class Config:
         mappings = self.get('tts.language_mappings', {})
         return mappings.get(lang_code, lang_code)
     
-    def should_save_raw_text(self) -> bool:
-        """Check if raw text should be saved."""
-        return self.get('output.save_raw_text', False)
-    
-    def should_save_cleaned_text(self) -> bool:
-        """Check if cleaned text should be saved."""
-        return self.get('output.save_cleaned_text', False)
-
-    def should_save_cleaned_chunks(self) -> bool:
-        """Check if cleaned text chunks should be saved."""
-        return self.get('output.save_cleaned_chunks', False)
+    # Deprecated legacy flags for saving artifacts were removed; artifacts are always saved.

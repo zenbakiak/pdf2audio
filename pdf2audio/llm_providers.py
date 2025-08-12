@@ -49,14 +49,23 @@ class OpenAILLM(LLMProvider):
         except Exception as e:
             raise ValueError(f"Failed to initialize OpenAI client. Error: {e}")
 
+    def _maybe_print_model(self, model_name: str):
+        if getattr(self, "_printed_model", False):
+            return
+        if self.config.verbose:
+            print(f"Using OpenAI LLM model: {model_name}")
+        self._printed_model = True
+
     def clean_text(self, text: str) -> str:
         if not text:
             return text
         llm_config = self.config.get_llm_config('openai')
         prompt = self.config.cleaning_prompt
         try:
+            model_name = llm_config.get('model', 'gpt-3.5-turbo')
+            self._maybe_print_model(model_name)
             response = self.client.chat.completions.create(
-                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You are a text cleaning assistant."},
                     {"role": "user", "content": f"{prompt}\n\n{text}"}
@@ -77,8 +86,10 @@ class OpenAILLM(LLMProvider):
         llm_config = self.config.get_llm_config('openai')
         prompt = self.config.ssml_prompt
         try:
+            model_name = llm_config.get('model', 'gpt-3.5-turbo')
+            self._maybe_print_model(model_name)
             response = self.client.chat.completions.create(
-                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You are an SSML tagging assistant."},
                     {"role": "user", "content": f"{prompt}\n\n{text}"}
@@ -102,8 +113,10 @@ class OpenAILLM(LLMProvider):
         length_note = f"\nTarget length: at least {target_words} words." if target_words else ""
         prompt = f"{base}{lang_note}{length_note}"
         try:
+            model_name = llm_config.get('model', 'gpt-3.5-turbo')
+            self._maybe_print_model(model_name)
             response = self.client.chat.completions.create(
-                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You produce concise, coherent audiobook-style summaries."},
                     {"role": "user", "content": f"{prompt}\n\n{text}"}
@@ -127,8 +140,10 @@ class OpenAILLM(LLMProvider):
         length_note = f"\nDo not shorten; target overall length ≥ {target_words} words." if target_words else ""
         prompt = f"{base}{lang_note}{length_note}"
         try:
+            model_name = llm_config.get('model', 'gpt-3.5-turbo')
+            self._maybe_print_model(model_name)
             response = self.client.chat.completions.create(
-                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You merge and compress summaries into a single coherent narrative without losing details."},
                     {"role": "user", "content": f"{prompt}\n\n{text}"}
@@ -150,8 +165,10 @@ class OpenAILLM(LLMProvider):
         src = f"\n\nSource points (for fidelity):\n{source}" if source else ""
         prompt = f"The following summary is too short. {target_note}{lang_note}\n\nSummary to expand:\n{summary}{src}"
         try:
+            model_name = llm_config.get('model', 'gpt-3.5-turbo')
+            self._maybe_print_model(model_name)
             response = self.client.chat.completions.create(
-                model=llm_config.get('model', 'gpt-3.5-turbo'),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You expand summaries by adding missing but consistent detail; no hallucinations."},
                     {"role": "user", "content": prompt}
@@ -177,15 +194,47 @@ class GeminiLLM(LLMProvider):
             raise ValueError("GEMINI_API_KEY environment variable not set")
         genai.configure(api_key=api_key)
 
+    def _fallback_models(self):
+        # Order: fast → higher quality
+        return [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-1.0-pro',
+        ]
+
+    def _gen_with_fallback(self, prompt: str, model_name: str) -> str:
+        """Generate with configured model; on 404/not-found, retry with fallbacks."""
+        candidates = [model_name] + [m for m in self._fallback_models() if m != model_name]
+        last_err = None
+        for name in candidates:
+            try:
+                model = genai.GenerativeModel(name)
+                resp = model.generate_content(prompt)
+                if self.config.verbose:
+                    # Print only once per instance
+                    if not getattr(self, "_printed_model", False):
+                        print(f"Using Gemini LLM model: {name}")
+                        self._printed_model = True
+                return resp.text
+            except Exception as e:
+                last_err = e
+                if self.config.verbose:
+                    print(f"Gemini generation failed with model '{name}': {e}")
+                # Continue to next candidate on not found or unsupported errors
+                if 'not found' in str(e).lower() or 'unsupported' in str(e).lower() or '404' in str(e):
+                    continue
+                else:
+                    break
+        # If all attempts failed, re-raise the last error
+        raise last_err
+
     def clean_text(self, text: str) -> str:
         if not text:
             return text
         llm_config = self.config.get_llm_config('gemini')
         prompt = self.config.cleaning_prompt
         try:
-            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
-            response = model.generate_content(f"{prompt}\n\n{text}")
-            return response.text
+            return self._gen_with_fallback(f"{prompt}\n\n{text}", llm_config.get('model', 'gemini-1.5-flash'))
         except Exception as e:
             if self.config.verbose:
                 print(f"Error cleaning text with Gemini: {e}")
@@ -198,9 +247,7 @@ class GeminiLLM(LLMProvider):
         llm_config = self.config.get_llm_config('gemini')
         prompt = self.config.ssml_prompt
         try:
-            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
-            response = model.generate_content(f"{prompt}\n\n{text}")
-            return response.text
+            return self._gen_with_fallback(f"{prompt}\n\n{text}", llm_config.get('model', 'gemini-1.5-flash'))
         except Exception as e:
             if self.config.verbose:
                 print(f"Error applying SSML with Gemini: {e}")
@@ -216,9 +263,7 @@ class GeminiLLM(LLMProvider):
         length_note = f"\nTarget length: at least {target_words} words." if target_words else ""
         prompt = f"{base}{lang_note}{length_note}"
         try:
-            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
-            response = model.generate_content(f"{prompt}\n\n{text}")
-            return response.text
+            return self._gen_with_fallback(f"{prompt}\n\n{text}", llm_config.get('model', 'gemini-1.5-flash'))
         except Exception as e:
             if self.config.verbose:
                 print(f"Error summarizing with Gemini: {e}")
@@ -234,9 +279,7 @@ class GeminiLLM(LLMProvider):
         length_note = f"\nDo not shorten; target overall length ≥ {target_words} words." if target_words else ""
         prompt = f"{base}{lang_note}{length_note}"
         try:
-            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
-            response = model.generate_content(f"{prompt}\n\n{text}")
-            return response.text
+            return self._gen_with_fallback(f"{prompt}\n\n{text}", llm_config.get('model', 'gemini-1.5-flash'))
         except Exception as e:
             if self.config.verbose:
                 print(f"Error merging summaries with Gemini: {e}")
@@ -250,9 +293,7 @@ class GeminiLLM(LLMProvider):
         src = f"\n\nSource points (for fidelity):\n{source}" if source else ""
         prompt = f"The following summary is too short. {target_note}{lang_note}\n\nSummary to expand:\n{summary}{src}"
         try:
-            model = genai.GenerativeModel(llm_config.get('model', 'gemini-pro'))
-            response = model.generate_content(prompt)
-            return response.text
+            return self._gen_with_fallback(prompt, llm_config.get('model', 'gemini-1.5-flash'))
         except Exception as e:
             if self.config.verbose:
                 print(f"Error expanding summary with Gemini: {e}")
@@ -270,4 +311,3 @@ class LLMFactory:
         if not provider_class:
             raise ValueError(f"Unsupported LLM provider: {provider_name}")
         return provider_class(config)
-

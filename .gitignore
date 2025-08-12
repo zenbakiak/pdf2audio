@@ -307,3 +307,5 @@ yarn-error.log*
 # Keep example files
 !example_*.pdf
 !sample_config.yml
+out/**
+assets/*

@@ -230,6 +230,11 @@ class TextToSpeechProcessor:
             voice_config = self.config.get_tts_config(provider_name)
             if voice_config:
                 print(f"Voice settings: {voice_config}")
+            # Explicitly show TTS model for OpenAI if configured
+            if provider_name == 'openai':
+                model = voice_config.get('model') if isinstance(voice_config, dict) else None
+                if model:
+                    print(f"TTS model: {model}")
         
         # Validate speaking rate if it's not 1.0
         speaking_rate = self.config.speaking_rate
@@ -322,9 +327,8 @@ class PDFProcessor:
         if not raw_text:
             raise ValueError("No text found in PDF")
         
-        # Save raw text if configured
-        if self.config.should_save_raw_text():
-            self.save_text_file(raw_text, output_path, 'raw')
+        # Always save raw text
+        self.save_text_file(raw_text, output_path, 'raw')
         
         # Clean text unless skipped
         if skip_cleaning:
@@ -332,9 +336,8 @@ class PDFProcessor:
         else:
             cleaned_text = self.content_cleaner.clean(raw_text)
             
-            # Save cleaned text if configured
-            if self.config.should_save_cleaned_text():
-                self.save_text_file(cleaned_text, output_path, 'cleaned')
+            # Save cleaned text
+            self.save_text_file(cleaned_text, output_path, 'cleaned')
         
         # Chunk text and convert to speech
         max_chunk = self.tts_processor.provider.get_max_chunk_size(is_ssml=False)
