@@ -45,6 +45,7 @@ setup(
         "console_scripts": [
             "pdf2audio=pdf2audio.cli:main",
             "pdf-to-audio=pdf2audio.cli:main",
+            "pdf2audio-validate-job=pdf2audio.job_validator:main",
         ],
     },
     include_package_data=True,
@@ -52,6 +53,7 @@ setup(
         "pdf2audio": [
             "data/default_config.yml",
             "data/.env.example",
+            "data/job.schema.json",
         ],
     },
     keywords="pdf, audio, tts, text-to-speech, openai, aws, polly, gtts, accessibility",
@@ -67,6 +69,7 @@ setup(
             "black>=21.0",
             "flake8>=3.8",
             "mypy>=0.900",
+            "jsonschema>=4.0",
         ],
         "all": [
             "openai>=1.0.0",

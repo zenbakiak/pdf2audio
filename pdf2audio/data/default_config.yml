@@ -51,8 +51,10 @@ tts:
 
     # Google Cloud TTS - Studio-quality voices
     google:
-      language_code: "es-US"
-      voice_name: "es-US-Studio-B"  # Male studio voice
+      language_code: "en-US"
+      # language_code: "es-US"
+      # voice_name: "es-US-Studio-B"  # Male studio voice
+      voice_name: "en-US-Studio-O"  # Male studio voice
       # Other popular voices:
       # en-US-Studio-O (Female)
       # en-US-Wavenet-D (Male)
@@ -87,7 +89,7 @@ llm:
 
     # Google Gemini settings
     gemini:
-      model: "gemini-pro"       # Current Gemini model
+      model: "gemini-1.5-flash" # Recommended default; fast and widely available
       temperature: 0.1          # Lower = more consistent, higher = more creative
 
   # Chunking behavior for LLM cleaning/SSML
@@ -134,10 +136,28 @@ llm:
 
   # Summary prompts
   summary_prompt: |
-    Create a concise, audiobook-style summary of the following text. Focus on the main narrative/argument and key points. Remove footnotes, tables, figures, citations, and boilerplate. Keep a clear, engaging flow suitable for listening. Return only the summarized text.
+    You are creating a learning-focused, audiobook-ready condensation of a longer work. Your goal is not a brief teaser, but an instructive narration that teaches the listener the most important content.
+
+    Requirements:
+    - Extract the core ideas and essential details; omit trivia, boilerplate, paratext, and references.
+    - Organize clearly with short, descriptive headings and coherent paragraphs; add transitions.
+    - Preserve definitions, key terms, claims, evidence, cause–effect relationships, and important examples.
+    - If relevant, retain formulas or code as readable text (do not over-abbreviate).
+    - For non‑fiction: state the central thesis, major arguments, methods (if applicable), findings, and implications.
+    - For fiction: cover setting, main characters, motivations, conflicts, turning points, and themes without meandering subplots.
+    - Write as a self-contained study resource, suitable for attentive listening (prose over bullet lists).
+    - Do not include meta commentary, instructions, or apologies. Return only the condensed narration.
+
+    Produce the condensed narration of the following text:
 
   summary_merge_prompt: |
-    Merge and condense the following chunk summaries into a single, cohesive audiobook-style summary. Remove repetition, keep logical order, and preserve only the most important ideas and transitions. Return only the final summary.
+    Merge the following chunk summaries into a single, cohesive study‑oriented narration. Do not shorten excessively; keep comprehensive coverage of the most important content.
+
+    Requirements:
+    - Remove repetition and resolve overlaps; ensure consistent terminology.
+    - Preserve a logical order with brief headings and smooth transitions.
+    - Retain definitions, key ideas, evidence, examples, and conclusions; keep the narrative instructional and listenable.
+    - No meta commentary. Return only the merged narration.
 
   # SSML enhancement prompt - This is sent to the LLM to add SSML tags
   ssml_prompt: |
@@ -162,15 +182,6 @@ llm:
 # OUTPUT CONFIGURATION
 # ============================================================================
 output:
-  # Save original extracted text from PDF (useful for debugging)
-  save_raw_text: true
-
-  # Save LLM-cleaned text (useful for reviewing cleaning quality)
-  save_cleaned_text: true
-
-  # Save cleaned text chunks (useful for debugging chunking issues)
-  save_cleaned_chunks: false
-
   # Enable verbose logging (shows processing steps and progress)
   verbose: true
 

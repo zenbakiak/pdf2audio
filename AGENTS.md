@@ -17,10 +17,19 @@
   - `python -m venv venv && source venv/bin/activate`
   - `pip install -e .`
 - Quick checks:
-  - Dry run: `python -m pdf2audio.cli --pdf assets/test.pdf --mp3 out/test.mp3 --dry-run --save-chunks`
+  - Dry run (extract + chunk only): `python -m pdf2audio.cli --pdf assets/test.pdf --mp3 out/test.mp3 --dry-run`
   - Full (gTTS, no LLM): `python -m pdf2audio.cli --pdf assets/test.pdf --mp3 out/test.mp3 --no-llm --ttsprovider gtts`
   - Cleaning example (needs `OPENAI_API_KEY`): `--cleaner-llm openai --lang es-MX`
-- Build package: `python setup.py sdist bdist_wheel` (or `python build.py`)
+  - Build package: `python setup.py sdist bdist_wheel` (or `python build.py`)
+
+## Jobs & Manifests
+- Every run writes a job manifest next to the MP3: `<mp3_dir>/<stem>.yml` summarizing inputs, params, and artifact paths.
+- Resume without re-cleaning: `python -m pdf2audio.cli --job out/test.yml --mp3 out/test_new.mp3 --no-llm`
+- Edit cleaned/summary text (under `<mp3_dir>/<stem>/`) and regenerate audio using `--job` to save LLM credits.
+- JSON Schema for manifests: `pdf2audio/data/job.schema.json` (use with your preferred validator).
+ - Validate a job file:
+   - Module: `python scripts/validate_job.py out/test.yml`
+   - CLI: `pdf2audio-validate-job out/test.yml`
 
 ## Coding Style & Naming Conventions
 - Python, 4‑space indent, PEP 8 naming: `snake_case` functions/files, `PascalCase` classes.

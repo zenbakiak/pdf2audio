@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 import os
+import re
 from typing import List, Optional
 from gtts import gTTS
 from openai import OpenAI
@@ -344,14 +345,52 @@ class GoogleCloudTTS(TTSProvider):
 
     def get_max_chunk_size(self, is_ssml: bool = False) -> int:
         """Get max chunk size for Google Cloud TTS."""
-        return 4800 if is_ssml else 5000
+        # Google enforces a 5000-byte limit on input.text/ssml. Since our
+        # chunking operates on characters, use conservative character limits
+        # to account for UTF-8 bytes and SSML tag overhead.
+        # - SSML: cap at ~2400 chars (~4800 bytes worst-case)
+        # - Plain text: cap at ~4000 chars
+        return 2400 if is_ssml else 4000
+
+    def _sanitize_ssml(self, ssml: str) -> str:
+        """Attempt to normalize SSML to valid XML with a single <speak> root.
+
+        - Ensures a single <speak> root (removes nested speak wrappers).
+        - Escapes stray ampersands.
+        - Falls back to stripping tags and wrapping text in <speak> on failure.
+        """
+        from xml.etree import ElementTree as ET
+        original = ssml
+        def is_valid(s: str) -> bool:
+            try:
+                ET.fromstring(s)
+                return True
+            except ET.ParseError:
+                return False
+
+        # If already valid XML, return as-is
+        if is_valid(ssml):
+            return ssml
+
+        # Remove all speak wrappers then wrap once
+        body = re.sub(r"</?speak[^>]*>", "", ssml, flags=re.IGNORECASE)
+        # Escape stray ampersands (that are not part of an entity)
+        body = re.sub(r"&(?![a-zA-Z#]+;)", "&amp;", body)
+        candidate = f"<speak>{body}</speak>"
+        if is_valid(candidate):
+            return candidate
+
+        # Final fallback: strip all tags and escape
+        text_only = re.sub(r"<[^>]+>", "", original)
+        text_only = re.sub(r"&(?![a-zA-Z#]+;)", "&amp;", text_only)
+        return f"<speak>{text_only}</speak>"
 
     def synthesize(self, chunks: List[str], output_path: str, language: str = 'en') -> None:
         """Synthesize text using Google Cloud TTS."""
         voice_config = self.config.get_tts_config('google')
         speaking_rate = self.config.speaking_rate
         
-        is_ssml = len(chunks) > 0 and chunks[0].strip().startswith('<speak>')
+        is_ssml = len(chunks) > 0 and chunks[0].strip().startswith('<speak')
         
         audio_segments = []
         temp_files = []
@@ -365,7 +404,8 @@ class GoogleCloudTTS(TTSProvider):
                     print(f"Processing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
 
                 if is_ssml:
-                    synthesis_input = texttospeech.SynthesisInput(ssml=chunk)
+                    safe_ssml = self._sanitize_ssml(chunk)
+                    synthesis_input = texttospeech.SynthesisInput(ssml=safe_ssml)
                 else:
                     synthesis_input = texttospeech.SynthesisInput(text=chunk)
                 

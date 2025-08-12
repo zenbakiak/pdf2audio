@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+import yaml
 
 from .config import Config
 from .processors import PDFProcessor, ContentCleaner, TextToSpeechProcessor
@@ -38,17 +39,10 @@ Examples:
         """
     )
     
-    # Required arguments
-    parser.add_argument(
-        '--pdf', 
-        required=True,
-        help='Path to input PDF file'
-    )
-    parser.add_argument(
-        '--mp3', 
-        required=True,
-        help='Path to output MP3 file'
-    )
+    # Input/Output arguments
+    parser.add_argument('--pdf', help='Path to input PDF file')
+    parser.add_argument('--mp3', help='Path to output MP3 file')
+    parser.add_argument('--job', help='Path to a job YAML file to resume/reprocess')
     
     # Optional arguments
     parser.add_argument(
@@ -84,11 +78,7 @@ Examples:
         action='store_true',
         help='Enable SSML for TTS'
     )
-    parser.add_argument(
-        '--save-chunks',
-        action='store_true',
-        help='Save cleaned text chunks to files'
-    )
+    # Chunks are always saved; flag removed
     parser.add_argument(
         '--dry-run',
         action='store_true',
@@ -119,14 +109,20 @@ Examples:
 
 def validate_arguments(args):
     """Validate command line arguments."""
-    # Check if PDF file exists
-    if not Path(args.pdf).exists():
-        print(f"Error: PDF file not found: {args.pdf}")
-        return False
-    
-    # Ensure output directory exists
-    output_path = Path(args.mp3)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not args.job:
+        # Require pdf and mp3 when not resuming from a job
+        if not args.pdf or not args.mp3:
+            print("Error: --pdf and --mp3 are required unless --job is provided.")
+            return False
+        if not Path(args.pdf).exists():
+            print(f"Error: PDF file not found: {args.pdf}")
+            return False
+        output_path = Path(args.mp3)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        if not Path(args.job).exists():
+            print(f"Error: Job file not found: {args.job}")
+            return False
     
     return True
 
@@ -174,9 +170,6 @@ def main():
         if args.use_ssml:
             config.set('llm.use_ssml', True)
         
-        if args.save_chunks:
-            config.set('output.save_cleaned_chunks', True)
-
         if args.llm_chunk_strategy:
             config.set('llm.chunk_strategy', args.llm_chunk_strategy)
 
@@ -200,6 +193,17 @@ def main():
             print(f"Warning: SSML is not supported by provider '{config.tts_provider}'. Disabling SSML.")
             args.use_ssml = False
         
+        # Load job file if provided
+        job_data = None
+        if args.job:
+            with open(args.job, 'r', encoding='utf-8') as jf:
+                job_data = yaml.safe_load(jf) or {}
+            # Populate missing CLI IO from job
+            if not args.mp3:
+                args.mp3 = job_data.get('outputs', {}).get('mp3')
+            if not args.pdf:
+                args.pdf = job_data.get('inputs', {}).get('pdf')
+
         # Compute output paths and organized artifact directories
         output_mp3_path = Path(args.mp3)
         output_base_dir = output_mp3_path.parent
@@ -207,28 +211,29 @@ def main():
         artifact_dir = output_base_dir / output_stem
         chunks_dir = artifact_dir / f"{output_stem}_chunks"
 
-        # Create artifact directory only if we will save artifacts
-        will_save_raw = config.should_save_raw_text()
-        will_save_cleaned = config.should_save_cleaned_text()
-        will_save_chunks = config.should_save_cleaned_chunks()
-        if will_save_raw or will_save_cleaned or will_save_chunks:
-            artifact_dir.mkdir(parents=True, exist_ok=True)
+        # Create artifact directories (artifacts always saved)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-        # Process PDF
-        print(f"Extracting text from: {args.pdf}")
-        text = pdf_processor.extract_text_from_pdf(args.pdf)
+        # Source text: from job raw_text if provided and exists, else extract
+        raw_output_path = artifact_dir / f"{output_stem}_raw.txt"
+        text = None
+        if job_data and job_data.get('artifacts', {}).get('raw_text') and Path(job_data['artifacts']['raw_text']).exists():
+            with open(job_data['artifacts']['raw_text'], 'r', encoding='utf-8') as f:
+                text = f.read()
+            if config.verbose:
+                print(f"Loaded raw text from job: {job_data['artifacts']['raw_text']}")
+        else:
+            print(f"Extracting text from: {args.pdf}")
+            text = pdf_processor.extract_text_from_pdf(args.pdf)
+            # Always save raw text
+            with open(raw_output_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"Raw text saved to: {raw_output_path}")
         
         if not text.strip():
             print("Error: No text found in PDF")
             sys.exit(1)
         
-        # Save raw text if configured (organized in artifact folder)
-        if will_save_raw:
-            raw_output_path = artifact_dir / f"{output_stem}_raw.txt"
-            with open(raw_output_path, 'w', encoding='utf-8') as f:
-                f.write(text)
-            print(f"Raw text saved to: {raw_output_path}")
-
         # Determine summary language (if summarizing)
         summary_lang = None
         if args.summarize:
@@ -244,15 +249,21 @@ def main():
                 print(f"Cleaning text with {config.llm_provider}...")
                 processed_text = content_cleaner.clean(text)
         else:
-            print("Skipping text cleaning (--no-llm or --dry-run)")
-            processed_text = text
-        
-        # Save cleaned/summary text if configured (organized in artifact folder)
-        if will_save_cleaned and content_cleaner:
-            if args.summarize:
-                processed_output_path = artifact_dir / f"{output_stem}_summary.txt"
+            # If job has cleaned or summary text, reuse it; otherwise proceed with raw
+            job_art = job_data.get('artifacts', {}) if job_data else {}
+            candidate = job_art.get('cleaned_text') or job_art.get('summary_text')
+            if candidate and Path(candidate).exists():
+                with open(candidate, 'r', encoding='utf-8') as f:
+                    processed_text = f.read()
+                print("Loaded processed text from job (skipping LLM)")
             else:
-                processed_output_path = artifact_dir / f"{output_stem}_cleaned.txt"
+                print("Skipping text cleaning (--no-llm or --dry-run)")
+                processed_text = text
+        
+        # Save processed text if LLM was used
+        processed_output_path = None
+        if content_cleaner:
+            processed_output_path = artifact_dir / (f"{output_stem}_summary.txt" if args.summarize else f"{output_stem}_cleaned.txt")
             with open(processed_output_path, 'w', encoding='utf-8') as f:
                 f.write(processed_text)
             print(f"Processed text saved to: {processed_output_path}")
@@ -261,14 +272,15 @@ def main():
         max_chunk_size = tts_processor.provider.get_max_chunk_size(is_ssml=args.use_ssml)
         chunks = chunk_text(processed_text, max_chunk_size)
         
-        # Save cleaned chunks if configured (organized in chunks subfolder)
-        if will_save_chunks:
-            chunks_dir.mkdir(parents=True, exist_ok=True)
-            for i, chunk in enumerate(chunks):
-                chunk_path = chunks_dir / f"chunk_{i}.txt"
-                with open(chunk_path, 'w', encoding='utf-8') as f:
-                    f.write(chunk)
-            print(f"Saved {len(chunks)} cleaned chunks to: {chunks_dir}")
+        # Always save chunks
+        chunks_dir.mkdir(parents=True, exist_ok=True)
+        chunk_files = []
+        for i, chunk in enumerate(chunks):
+            chunk_path = chunks_dir / f"chunk_{i}.txt"
+            with open(chunk_path, 'w', encoding='utf-8') as f:
+                f.write(chunk)
+            chunk_files.append(str(chunk_path))
+        print(f"Saved {len(chunks)} chunks to: {chunks_dir}")
 
         # Apply SSML if enabled (not in dry-run)
         if args.use_ssml:
@@ -278,20 +290,47 @@ def main():
             else:
                 print(f"Applying SSML to {len(chunks)} chunks...")
                 final_chunks = [content_cleaner.apply_ssml(chunk) for chunk in chunks]
-                # Save SSML text if configured
-                if will_save_cleaned:
-                    ssml_output_path = artifact_dir / f"{output_stem}_ssml.txt"
-                    with open(ssml_output_path, 'w', encoding='utf-8') as f:
-                        f.write("\n\n---\n\n".join(final_chunks))
-                    print(f"SSML text saved to: {ssml_output_path}")
+                # Save SSML text
+                ssml_output_path = artifact_dir / f"{output_stem}_ssml.txt"
+                with open(ssml_output_path, 'w', encoding='utf-8') as f:
+                    f.write("\n\n---\n\n".join(final_chunks))
+                print(f"SSML text saved to: {ssml_output_path}")
         else:
             final_chunks = chunks
         
         # If dry-run, stop after chunking
         if args.dry_run:
             print(f"Dry run complete. Extracted {len(text)} chars, {len(chunks)} chunks.")
-            if will_save_chunks:
-                print(f"Chunks saved to: {chunks_dir}")
+            print(f"Chunks saved to: {chunks_dir}")
+            # Write job manifest
+            job_path = output_mp3_path.with_suffix('.yml')
+            job_manifest = {
+                'inputs': {'pdf': args.pdf},
+                'outputs': {'mp3': str(output_mp3_path)},
+                'params': {
+                    'lang': config.get('tts.default_language', 'en'),
+                    'tts_provider': config.tts_provider,
+                    'llm_provider': None if not content_cleaner else config.llm_provider,
+                    'use_ssml': bool(args.use_ssml),
+                    'summarize': bool(args.summarize),
+                    'llm': {
+                        'chunk_strategy': config.get('llm.chunk_strategy', 'paragraph_sentence_word'),
+                        'max_chunk_chars': config.get('llm.max_chunk_chars', 20000)
+                    }
+                },
+                'artifacts': {
+                    'artifact_dir': str(artifact_dir),
+                    'raw_text': str(raw_output_path),
+                    'cleaned_text': str(processed_output_path) if (processed_output_path and not args.summarize) else None,
+                    'summary_text': str(processed_output_path) if (processed_output_path and args.summarize) else None,
+                    'ssml_text': str(artifact_dir / f"{output_stem}_ssml.txt") if args.use_ssml and content_cleaner else None,
+                    'chunks_dir': str(chunks_dir),
+                    'chunks': chunk_files,
+                }
+            }
+            with open(job_path, 'w', encoding='utf-8') as jf:
+                yaml.safe_dump(job_manifest, jf, sort_keys=False, allow_unicode=True)
+            print(f"Job manifest saved to: {job_path}")
             return
         
         # Convert to speech
@@ -300,6 +339,36 @@ def main():
         tts_processor.synthesize(final_chunks, args.mp3, language)
         
         print(f"✅ Audio file created: {args.mp3}")
+
+        # Write job manifest
+        job_path = output_mp3_path.with_suffix('.yml')
+        job_manifest = {
+            'inputs': {'pdf': args.pdf},
+            'outputs': {'mp3': str(output_mp3_path)},
+            'params': {
+                'lang': config.get('tts.default_language', 'en'),
+                'tts_provider': config.tts_provider,
+                'llm_provider': None if not content_cleaner else config.llm_provider,
+                'use_ssml': bool(args.use_ssml),
+                'summarize': bool(args.summarize),
+                'llm': {
+                    'chunk_strategy': config.get('llm.chunk_strategy', 'paragraph_sentence_word'),
+                    'max_chunk_chars': config.get('llm.max_chunk_chars', 20000)
+                }
+            },
+            'artifacts': {
+                'artifact_dir': str(artifact_dir),
+                'raw_text': str(raw_output_path),
+                'cleaned_text': str(processed_output_path) if (processed_output_path and not args.summarize) else None,
+                'summary_text': str(processed_output_path) if (processed_output_path and args.summarize) else None,
+                'ssml_text': str(artifact_dir / f"{output_stem}_ssml.txt") if args.use_ssml and content_cleaner else None,
+                'chunks_dir': str(chunks_dir),
+                'chunks': chunk_files,
+            }
+        }
+        with open(job_path, 'w', encoding='utf-8') as jf:
+            yaml.safe_dump(job_manifest, jf, sort_keys=False, allow_unicode=True)
+        print(f"🗂️  Job manifest saved to: {job_path}")
         
     except KeyboardInterrupt:
         print("\n❌ Operation cancelled by user")
